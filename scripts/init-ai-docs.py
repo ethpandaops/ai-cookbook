@@ -445,6 +445,114 @@ class DocumentationInitializer:
             print("\n❌ Cancelled by user")
             return False
     
+    def setup_cursor_structure(self) -> bool:
+        """Create .cursor directory structure and symbolic links."""
+        if self.dry_run:
+            print("[DRY RUN] Would create .cursor directory structure and symlinks")
+            return True
+        
+        cursor_dir = self.project_root / ".cursor"
+        rules_dir = cursor_dir / "rules"
+        
+        try:
+            # Create .cursor/rules directory
+            print("📁 Creating .cursor directory structure...")
+            cursor_dir.mkdir(exist_ok=True)
+            rules_dir.mkdir(exist_ok=True)
+            
+            # Create basic rule template files if they don't exist
+            rule_templates = {
+                "project_architecture.mdc": """# Project Architecture
+
+This file contains project-specific architecture guidelines and patterns.
+
+## Overview
+- Project structure and organization
+- Module dependencies and relationships
+- Key architectural decisions
+
+## Guidelines
+- Follow established patterns in the codebase
+- Maintain consistency with existing architecture
+- Document significant architectural changes
+
+_This file will be auto-generated and customized by Claude AI._
+""",
+                "code_standards.mdc": """# Code Standards
+
+This file defines coding standards and conventions for this project.
+
+## Code Style
+- Follow language-specific best practices
+- Maintain consistency with existing code
+- Use meaningful names for variables and functions
+
+## Documentation
+- Document public APIs and interfaces
+- Include examples where helpful
+- Keep documentation up to date
+
+_This file will be auto-generated and customized by Claude AI._
+""",
+                "development_workflow.mdc": """# Development Workflow
+
+This file outlines the development workflow and processes for this project.
+
+## Workflow
+- Feature branch development
+- Code review requirements
+- Testing standards
+
+## Tools and Processes
+- Build and deployment procedures
+- Quality assurance practices
+- Change management
+
+_This file will be auto-generated and customized by Claude AI._
+"""
+            }
+            
+            for filename, content in rule_templates.items():
+                rule_file = rules_dir / filename
+                if not rule_file.exists():
+                    print(f"   📝 Creating rule template: {filename}")
+                    rule_file.write_text(content)
+                else:
+                    print(f"   📝 Rule file already exists: {filename}")
+            
+            # Create symbolic links
+            symlinks = [
+                ("llms", ".cursor"),
+                (".roo", ".cursor"), 
+                ("ai_docs", ".cursor")
+            ]
+            
+            for link_name, target in symlinks:
+                link_path = self.project_root / link_name
+                
+                # Remove existing link/file if it exists
+                if link_path.exists() or link_path.is_symlink():
+                    if link_path.is_symlink():
+                        print(f"   🔗 Removing existing symlink: {link_name}")
+                        link_path.unlink()
+                    elif link_path.is_dir():
+                        print(f"   ⚠️  Directory {link_name} already exists, skipping symlink creation")
+                        continue
+                    else:
+                        print(f"   ⚠️  File {link_name} already exists, skipping symlink creation")
+                        continue
+                
+                # Create the symbolic link
+                print(f"   🔗 Creating symlink: {link_name} -> {target}")
+                link_path.symlink_to(target)
+            
+            print("   ✅ Directory structure and symlinks created successfully")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Failed to create directory structure: {e}")
+            return False
+    
     def execute_claude_command(self, command: str, params: str, component_name: str) -> bool:
         """Execute a claude command with parameters."""
         cmd = [
@@ -530,10 +638,16 @@ class DocumentationInitializer:
         
         print()
         
+        # Setup .cursor directory structure and symlinks first
+        if not self.setup_cursor_structure():
+            return False
+        
+        print()
+        
         # Execute project root initialization
         print("📋 Initializing project-level documentation...")
         success = self.execute_claude_command(
-            "init-project-ai-docs", 
+            "user:init-project-ai-docs",
             f"project-root={self.project_root}",
             "Project Root"
         )
@@ -551,7 +665,7 @@ class DocumentationInitializer:
                 rel_path = component_dir.relative_to(self.project_root)
                 
                 success = self.execute_claude_command(
-                    "init-component-ai-docs",
+                    "user:init-component-ai-docs",
                     f"project-root={self.project_root},component-dir={component_dir}",
                     str(rel_path)
                 )

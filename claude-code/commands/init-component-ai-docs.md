@@ -3,6 +3,13 @@
 ## Overview
 This command initializes AI documentation for a specific component/directory within a project. It analyzes the local codebase to create component-specific rules and documentation while referencing the project-wide rules.
 
+## Important Notes
+- Claude MUST NOT alter the parent component rules.
+- Claude MUST NOT repeat rules from the parent component.
+- Claude MUST NOT add rules that are not specific to this component.
+- Claude MUST NOT add rules that are not relevant to this component.
+- Claude MUST NOT touch any files outside of the component directory.
+
 ## Arguments
 Arguments are passed as key=value pairs in `$ARGUMENTS`.
 
@@ -19,6 +26,9 @@ Parse these from the comma-separated key=value format in `$ARGUMENTS`. If the pr
 
 ## Tasks
 
+### TASK 0: Echo the arguments
+Echo the arguments to the console.
+
 ### TASK 1: Analyze Component Codebase
 Analyze the current component directory to understand:
 - What this component does (purpose and functionality)
@@ -28,22 +38,25 @@ Analyze the current component directory to understand:
 - Testing patterns and strategies
 - Any unique patterns or conventions specific to this component
 
-### TASK 2: Create Component-Specific Rules
-Based on the analysis, create focused cursor rules for this component:
+### TASK 2: Analyze Parent Component Rules
+Analyze the parent component rules recursively, adding them to your context for later use.
 
-1. **Component Architecture** (`.cursor/rules/component_architecture.mdc`):
+### TASK 3: Create a component-specific cursor rules file.
+Based on the analysis, create a focused cursor rules file for this component. Using your knowledge of the parent component rules, only add rules that are specific and unique to this component. These rules should be concise, composable, and focused. Only add rules are are relevent, and DO NOT REPEAT RULES FROM THE PARENT COMPONENT.
+
+1. **Component Architecture**
    - Component purpose and responsibilities
    - Internal structure and organization
    - Dependencies and interfaces
    - Key design patterns used
 
-2. **Component Patterns** (`.cursor/rules/component_patterns.mdc`):
+2. **Component Patterns**
    - Coding patterns specific to this component
    - Error handling approaches
    - Logging and monitoring patterns
    - Performance considerations
 
-3. **Component Testing** (`.cursor/rules/component_testing.mdc`) - (if tests exist):
+3. **Component Testing** (if tests exist):
    - Testing approach and frameworks used
    - Test organization and naming conventions
    - Mocking and fixture patterns
@@ -57,25 +70,60 @@ Create a `./CLAUDE.md` file that serves as the entry point for this component:
 
 {{ COMPONENT_DESCRIPTION }}
 
-## Project Context
-Claude MUST read the project-wide rules from `{{ PROJECT_ROOT }}/.cursor/rules/` before making any changes. The project root is: {{ PROJECT_ROOT }}
-
-## Component Architecture  
-Claude MUST read the `.cursor/rules/component_architecture.mdc` file before making any changes to this component.
-
-## Component Patterns
-Claude MUST read the `.cursor/rules/component_patterns.mdc` file before writing code in this component.
-
-{{ IF_TESTS_EXIST }}
-## Testing
-Claude MUST read the `.cursor/rules/component_testing.mdc` file before writing or modifying tests.
-{{ END_IF }}
-
-## Important Notes
-- Always reference the project root documentation at {{ PROJECT_ROOT }}/CLAUDE.md for project-wide context
-- Follow the component-specific patterns and conventions documented in the rules above
-- When in doubt, prefer the component-specific rules over generic patterns
+##  Architecture  
+Claude MUST read the `.cursor/rules/$component.mdc` file before making any changes to this component.
 ```
 
-### TASK 5: Reference Project Rules
-Ensure the component documentation properly references and doesn't duplicate project-level rules. The component rules should be additive and specific, not repetitive of project-wide standards.
+## Cursor Rules Docs
+```
+Cursor Rules are stored in .cursor/rules/$file.mdc. Large language models do not retain memory between completions. Rules solve this by providing persistent, reusable context at the prompt level. When a rule is applied, its contents are included at the start of the model context. This gives the AI consistent guidance whether it is generating code, interpreting edits, or helping with a workflow
+​
+Use project rules to:
+- Encode domain-specific knowledge about the codebase
+- Automate project-specific workflows or templates
+- Standardize style or architecture decisions
+
+### Rule structure
+Each rule file is written in MDC (.mdc), a lightweight format that supports metadata and content in a single file. Rules supports the following types:
+
+Rule Type - Description
+Always - Always included in the model context
+Auto Attached - Included when files matching a glob pattern are referenced
+Agent Requested - Rule is available to the AI, which decides whether to include it. Must provide a description
+Manual - Only included when explicitly mentioned using @ruleName
+​
+Example MDC rule
+#######
+---
+description: RPC Service boilerplate
+globs: 
+alwaysApply: false
+---
+
+- Use our internal RPC pattern when defining services
+- Always use snake_case for service names.
+
+@service-template.ts
+########
+
+## Nested rules
+You can organize rules by placing them in .cursor/rules directories throughout your project structure. Perfect for organizing domain-specific rules closer to their relevant code. This is particularly useful in monorepos or projects with distinct components that need their own specific guidance. For example:
+
+project/
+  .cursor/rules/        # Project-wide rules
+  backend/
+    server/
+      .cursor/rules/    # Backend-specific rules
+  frontend/
+    .cursor/rules/      # Frontend-specific rules
+
+## Best practices
+Good rules are focused, actionable, and scoped.
+
+- Keep rules concise. Under 500 lines is a good target
+- Split large concepts into multiple, composable rules
+- Provide concrete examples or referenced files when helpful
+- Avoid vague guidance. Write rules the way you would write a clear internal doc
+- Reuse rules when you find yourself repeating prompts in chat
+
+```

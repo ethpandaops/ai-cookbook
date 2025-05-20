@@ -23,25 +23,24 @@ Create the foundational directory structure:
 - Ensure `.cursor/rules/` directory exists
 
 ### TASK 2: Create Project-Level Rules
-Create high-level cursor rules that apply to the entire project:
+Create high-level cursor rules that apply to the entire project. These MUST be completed in indvidual steps.
 
 1. **Project Architecture** (`.cursor/rules/project_architecture.mdc`):
-   - Overall project structure and organization
-   - Main technologies and frameworks used
-   - Build systems and tooling
-   - Deployment patterns
+   - Overall project structure and organization if relevant
+   - Main technologies and frameworks used if relevant
+   - Build systems and tooling if relevant
 
 2. **Code Standards** (`.cursor/rules/code_standards.mdc`):
-   - Language-specific coding conventions
-   - Naming conventions
-   - File organization patterns
-   - Documentation standards
+   - Language-specific coding conventions if relevant
+   - Naming conventions if relevant
+   - File organization patterns if relevant
+   - Documentation standards if relevant
 
 3. **Development Workflow** (`.cursor/rules/development_workflow.mdc`):
-   - Git workflow and branching strategy
-   - Testing requirements and patterns
-   - CI/CD pipeline expectations
-   - Code review guidelines
+   - Git workflow and branching strategy if relevant
+   - Testing requirements and patterns if relevant
+   - CI/CD pipeline expectations if relevant
+   - Code review guidelines if relevant
 
 ### TASK 3: Update Root CLAUDE.md
 Create the content of `./CLAUDE.md` with a project overview that references the main rules:
@@ -70,7 +69,7 @@ Individual components have their own CLAUDE.md files with component-specific rul
 - The rules should be in the current project.
 - Rules should be adequately scoped to the area of the codebase.
 
-## Docs
+## Cursor Rules Docs
 ```
 Cursor Rules are stored in .cursor/rules/$file.mdc. Large language models do not retain memory between completions. Rules solve this by providing persistent, reusable context at the prompt level. When a rule is applied, its contents are included at the start of the model context. This gives the AI consistent guidance whether it is generating code, interpreting edits, or helping with a workflow
 ​
