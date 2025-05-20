@@ -553,12 +553,12 @@ _This file will be auto-generated and customized by Claude AI._
             print(f"❌ Failed to create directory structure: {e}")
             return False
     
-    def execute_claude_command(self, command: str, params: str, component_name: str) -> bool:
+    def execute_claude_command(self, command: str, component_name: str) -> bool:
         """Execute a claude command with parameters."""
         cmd = [
             "claude", "-p", "--dangerously-skip-permissions",
             "--verbose", "--output-format", "stream-json",
-            f"/{command}", params
+            f"/{command}"
         ]
         print(f"Executing: {' '.join(cmd)}")
         return self.execute_command(cmd, component_name)
@@ -647,8 +647,7 @@ _This file will be auto-generated and customized by Claude AI._
         # Execute project root initialization
         print("📋 Initializing project-level documentation...")
         success = self.execute_claude_command(
-            "user:init-project-ai-docs",
-            f"project-root={self.project_root}",
+            "user:init-project-ai-docs project-root={self.project_root}",
             "Project Root"
         )
         
@@ -665,8 +664,7 @@ _This file will be auto-generated and customized by Claude AI._
                 rel_path = component_dir.relative_to(self.project_root)
                 
                 success = self.execute_claude_command(
-                    "user:init-component-ai-docs",
-                    f"project-root={self.project_root},component-dir={component_dir}",
+                    f"user:init-component-ai-docs project-root={self.project_root},component-dir={component_dir}",
                     str(rel_path)
                 )
                 

@@ -9,6 +9,10 @@ This command initializes AI documentation for a specific component/directory wit
 - Claude MUST NOT add rules that are not specific to this component.
 - Claude MUST NOT add rules that are not relevant to this component.
 - Claude MUST NOT touch any files outside of the component directory.
+- Claude MUST ONLY alter the following files:
+  - $PROJECT_ROOT/$component-dir/CURSOR.mdc
+  - $PROJECT_ROOT/$component-dir/CLAUDE.md
+  - $PROJECT_ROOT/.cursor/rules/$component-dir/$component.mdc which is a symbolic link to $PROJECT_ROOT/$component-dir/CURSOR.mdc
 
 ## Arguments
 Arguments are passed as key=value pairs in `$ARGUMENTS`.
@@ -39,10 +43,12 @@ Analyze the current component directory to understand:
 - Any unique patterns or conventions specific to this component
 
 ### TASK 2: Analyze Parent Component Rules
-Analyze the parent component rules recursively, adding them to your context for later use.
+Analyze the parent component rules recursively, adding them to your context for later use. To do thie effectively, you should start at the project root, and work your way down to the component directory.
 
 ### TASK 3: Create a component-specific cursor rules file.
-Based on the analysis, create a focused cursor rules file for this component. Using your knowledge of the parent component rules, only add rules that are specific and unique to this component. These rules should be concise, composable, and focused. Only add rules are are relevent, and DO NOT REPEAT RULES FROM THE PARENT COMPONENT.
+Based on the analysis, create a focused cursor rules file for this component. Using your knowledge of the parent component rules, only add rules that are specific and unique to this component. These rules should be concise, composable, and focused. Only add rules are are relevent, and DO NOT REPEAT RULES FROM THE PARENT COMPONENT. The rules file must correctly define _when_ the agent should use the rules, and _what_ the rules are for.
+
+This file will live in $PROJECT_ROOT/$component-dir/CURSOR.mdc
 
 1. **Component Architecture**
    - Component purpose and responsibilities
@@ -63,7 +69,7 @@ Based on the analysis, create a focused cursor rules file for this component. Us
    - Test data management
 
 ### TASK 3: Create Component CLAUDE.md
-Create a `./CLAUDE.md` file that serves as the entry point for this component:
+Create a `./CLAUDE.md` file at $PROJECT_ROOT/$component-dir/CLAUDE.md that serves as the entry point for this component:
 
 ```markdown
 # {{ COMPONENT_NAME }}
@@ -71,7 +77,7 @@ Create a `./CLAUDE.md` file that serves as the entry point for this component:
 {{ COMPONENT_DESCRIPTION }}
 
 ##  Architecture  
-Claude MUST read the `.cursor/rules/$component.mdc` file before making any changes to this component.
+Claude MUST read the `$PROJECT_ROOT/$component-dir/CURSOR.mdc` file before making any changes to this component.
 ```
 
 ## Cursor Rules Docs
