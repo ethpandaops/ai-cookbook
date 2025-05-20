@@ -18,7 +18,7 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    cd ai-cookbook
    ```
 
-2. Run the setup script to install Claude Code commands:
+2. Run the setup script to install Claude Code commands & scripts:
    ```bash
    ./setup.sh
    ```
