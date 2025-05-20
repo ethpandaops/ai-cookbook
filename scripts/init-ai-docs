@@ -245,6 +245,7 @@ echo "   │       ├── code_standards.mdc"
 echo "   │       └── development_workflow.mdc"
 echo "   ├── llms/ -> .cursor (symlink)"
 echo "   └── .roo/ -> .cursor (symlink)"
+echo "   └── ai_docs/ -> .cursor (symlink)"
 echo ""
 
 if [ ${#COMPONENT_DIRS[@]} -eq 0 ]; then

@@ -67,6 +67,7 @@ project-root/
 │       └── development_workflow.mdc    # Git workflow and CI/CD patterns
 ├── llms/ -> .cursor (symlink)
 └── .roo/ -> .cursor (symlink)
+└── ai_docs/ -> .cursor (symlink)
 ```
 
 ### Component Structure
