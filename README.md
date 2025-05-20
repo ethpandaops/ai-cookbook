@@ -1,8 +1,8 @@
-# ethPandaOps AI Cookbook
+# 🐼 ethPandaOps AI Cookbook 🍳
 
 A centralized repository for AI documentation, commands, and tools used by the ethPandaOps team.
 
-## Overview
+## 📋 Overview
 
 This repository serves as a shared resource for the ethPandaOps team to store and maintain:
 - Claude Code commands and workflows
@@ -10,7 +10,7 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 - Shared scripts and utilities
 - Team conventions and best practices
 
-## Quick Start
+## 🚀 Quick Start
 
 1. Clone this repository:
    ```bash
@@ -31,7 +31,7 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    git pull
    ```
 
-## Structure
+## 📁 Structure
 
 ```
 ├── claude-code/
@@ -42,7 +42,7 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 └── README.md              # This file
 ```
 
-## Usage
+## 🎮 Usage
 
 After running `setup.sh`, the commands will be available in Claude Code. You can use them by referencing the command name in your Claude Code sessions.
 
@@ -51,13 +51,13 @@ To add new commands:
 2. Commit and push your changes
 3. Team members can update by running `git pull`
 
-## Contributing
+## 🤝 Contributing
 
 1. Create a branch for your changes
 2. Add your commands, documentation, or scripts
 3. Create a pull request for review
 4. After approval, merge to main
 
-## Support
+## 🆘 Support
 
 For questions or issues, please create an issue in this repository or reach out to the ethPandaOps team.
