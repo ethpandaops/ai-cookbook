@@ -24,8 +24,8 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    ```
 
 3. The setup script will do the following:
-- Copy all the commands `./claude-code/commands/*` files to `~/.claude/commands/ethpandaops/`
-
+    - Copy all the commands `./claude-code/commands/*` files to `~/.claude/commands/ethpandaops/`
+    - Add the `scripts/` directory to your PATH
 4. To update commands, simply run:
    ```bash
    git pull
