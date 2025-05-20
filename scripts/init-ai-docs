@@ -197,6 +197,11 @@ COMPONENT_DIRS=()
 
 # Look for directories with common code file extensions
 while IFS= read -r -d '' dir; do
+    # Skip the project root directory itself
+    if [ "$dir" = "$PROJECT_ROOT" ]; then
+        continue
+    fi
+    
     # Skip hidden directories, node_modules, vendor, etc.
     if echo "$dir" | grep -qE "\/(\..*|node_modules|vendor|build|dist|target|static|__pycache__|\.git)\/"; then
         continue
