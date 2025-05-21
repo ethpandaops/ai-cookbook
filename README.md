@@ -2,6 +2,8 @@
 
 A centralized repository for AI documentation, commands, and tools used by the ethPandaOps team.
 
+![image](./images/wok.png)
+
 ## 📋 Overview
 
 This repository serves as a shared resource for the ethPandaOps team to store and maintain:
