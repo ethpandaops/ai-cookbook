@@ -10,6 +10,7 @@ This command helps you create a detailed, well-structured implementation plan fo
 - Each section should be clearly labeled with appropriate heading levels for hierarchy
 - Technical requirements and constraints should be explicitly stated
 - Prioritize modularity, maintainability, and clear component boundaries
+- Claude MUST create the plan in `./ai_plans/$PLAN_NAME.md`
 
 ## Tasks
 
@@ -229,3 +230,5 @@ Use this structure as a template for your plan:
 8. **Progressive Disclosure**: Organize from high-level to detailed implementation
 9. **Modular Design**: Ensure components have clear responsibilities and boundaries
 10. **Maintainability**: Consider future maintenance and extensibility 
+
+Reminder for Claude: THIS IS THE STRUCTURE OF A PLAN. DO NOT START YET. AWAIT INSTRUCTIONS FROM THE USER.
