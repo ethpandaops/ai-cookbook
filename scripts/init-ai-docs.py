@@ -162,12 +162,13 @@ class DocumentationInitializer:
         self.dry_run = dry_run
         self.verbose = verbose
         self.component_dirs: List[Path] = []
+        self.component_dirs_by_depth: dict[int, List[Path]] = {}
         self.task_stats: List[TaskStats] = []
         
         # Code file extensions to look for
         self.code_extensions = {
             "*.go", "*.ts", "*.js", "*.py", "*.rs", 
-            "*.java", "*.cpp", "*.c", "*.h"
+            "*.java", "*.cpp", "*.c", "*.h", "*.md", "*.sh"
         }
         
         # Directories to skip
@@ -181,13 +182,17 @@ class DocumentationInitializer:
         if self.verbose or self.dry_run:
             print(message)
     
-    def execute_command(self, cmd: List[str], component_name: Optional[str] = None) -> bool:
+    def execute_command(self, cmd: List[str], component_name: Optional[str] = None, working_dir: Optional[Path] = None) -> bool:
         """Execute a command with optional progress spinner and streaming output."""
         if self.dry_run:
             print(f"[DRY RUN] Would execute: {' '.join(cmd)}")
+            if working_dir:
+                print(f"[DRY RUN] Working directory: {working_dir}")
             return True
         
         self.log(f"Executing: {' '.join(cmd)}")
+        if working_dir:
+            self.log(f"Working directory: {working_dir}")
         
         if component_name:
             # Create task stats for tracking
@@ -207,7 +212,8 @@ class DocumentationInitializer:
                     stderr=subprocess.PIPE,
                     text=True,
                     bufsize=1,
-                    universal_newlines=True
+                    universal_newlines=True,
+                    cwd=working_dir
                 )
                 
                 import json
@@ -304,7 +310,7 @@ class DocumentationInitializer:
         else:
             # Run without spinner
             try:
-                result = subprocess.run(cmd, text=True)
+                result = subprocess.run(cmd, text=True, cwd=working_dir)
                 return result.returncode == 0
             except Exception as e:
                 print(f"❌ Command failed with exception: {e}")
@@ -363,8 +369,8 @@ class DocumentationInitializer:
             return False
     
     def find_component_directories(self):
-        """Find all directories that contain code files."""
-        self.component_dirs = []
+        """Find all directories that contain code files, organized by depth level."""
+        all_component_dirs = []
         
         for root, dirs, files in os.walk(self.project_root):
             root_path = Path(root)
@@ -383,10 +389,26 @@ class DocumentationInitializer:
             
             # Check if directory contains code files
             if self.has_code_files(root_path):
-                self.component_dirs.append(root_path)
+                all_component_dirs.append(root_path)
         
-        # Sort directories for consistent processing
-        self.component_dirs.sort()
+        # Group directories by depth level (number of path parts from project root)
+        self.component_dirs_by_depth = {}
+        for component_dir in all_component_dirs:
+            rel_path = component_dir.relative_to(self.project_root)
+            depth = len(rel_path.parts)
+            
+            if depth not in self.component_dirs_by_depth:
+                self.component_dirs_by_depth[depth] = []
+            self.component_dirs_by_depth[depth].append(component_dir)
+        
+        # Sort directories within each depth level for consistent processing
+        for depth in self.component_dirs_by_depth:
+            self.component_dirs_by_depth[depth].sort()
+        
+        # Also maintain flat list for backward compatibility
+        self.component_dirs = []
+        for depth in sorted(self.component_dirs_by_depth.keys()):
+            self.component_dirs.extend(self.component_dirs_by_depth[depth])
     
     def show_plan(self):
         """Display the documentation plan."""
@@ -409,22 +431,27 @@ class DocumentationInitializer:
         if not self.component_dirs:
             print("⚠️  No component directories found")
         else:
-            print(f"📦 Components ({len(self.component_dirs)} directories):")
+            print(f"📦 Components ({len(self.component_dirs)} directories - processed by depth):")
+            print()
             
-            for i, component_dir in enumerate(self.component_dirs):
-                rel_path = component_dir.relative_to(self.project_root)
+            for depth in sorted(self.component_dirs_by_depth.keys()):
+                depth_dirs = self.component_dirs_by_depth[depth]
+                print(f"   📂 Depth {depth} ({len(depth_dirs)} directories):")
                 
-                if i == len(self.component_dirs) - 1:
-                    print(f"   └── {rel_path}/")
-                    print("       └── CLAUDE.md")
-                else:
-                    print(f"   ├── {rel_path}/")
-                    print("   │   └── CLAUDE.md")
+                for i, component_dir in enumerate(depth_dirs):
+                    rel_path = component_dir.relative_to(self.project_root)
+                    
+                    prefix = "   └──" if i == len(depth_dirs) - 1 else "   ├──"
+                    print(f"   {prefix} {rel_path}/")
+                    print(f"       └── CLAUDE.md + CURSOR.mdc")
+                print()
         
         print()
         print("📊 Summary:")
         print("   • Will create 1 project root with .cursor/rules/ structure")
-        print(f"   • Will create CLAUDE.md in {len(self.component_dirs)} component directories")
+        print(f"   • Will create CLAUDE.md + CURSOR.mdc in {len(self.component_dirs)} component directories")
+        print("   • Components will be processed by depth level to ensure parent rules exist first")
+        print("   • Each CURSOR.mdc includes glob patterns for auto-attachment")
         print("   • Each component CLAUDE.md references project root rules, and will create an equivalent rule in .cursor/rules/")
         print()
     
@@ -553,15 +580,17 @@ _This file will be auto-generated and customized by Claude AI._
             print(f"❌ Failed to create directory structure: {e}")
             return False
     
-    def execute_claude_command(self, command: str, component_name: str) -> bool:
-        """Execute a claude command with parameters."""
+    def execute_claude_command(self, command: str, component_name: str, working_dir: Optional[Path] = None) -> bool:
+        """Execute a claude command with parameters, optionally from a specific working directory."""
         cmd = [
             "claude", "-p", "--dangerously-skip-permissions",
             "--verbose", "--output-format", "stream-json",
             f"/{command}"
         ]
         print(f"Executing: {' '.join(cmd)}")
-        return self.execute_command(cmd, component_name)
+        if working_dir:
+            print(f"Working directory: {working_dir}")
+        return self.execute_command(cmd, component_name, working_dir)
     
     def show_summary(self):
         """Show a summary of all completed tasks with stats."""
@@ -647,8 +676,9 @@ _This file will be auto-generated and customized by Claude AI._
         # Execute project root initialization
         print("📋 Initializing project-level documentation...")
         success = self.execute_claude_command(
-            "user:init-project-ai-docs project-root={self.project_root}",
-            "Project Root"
+            f"user:init-project-ai-docs project-root={self.project_root}",
+            "Project Root",
+            working_dir=self.project_root
         )
         
         if not success:
@@ -656,20 +686,32 @@ _This file will be auto-generated and customized by Claude AI._
         
         print()
         
-        # Execute component initialization
+        # Execute component initialization depth by depth
         if self.component_dirs:
-            print("📦 Processing components...")
+            print("📦 Processing components by depth (ensuring parent rules exist before child rules)...")
+            print()
             
-            for component_dir in self.component_dirs:
-                rel_path = component_dir.relative_to(self.project_root)
+            for depth in sorted(self.component_dirs_by_depth.keys()):
+                depth_dirs = self.component_dirs_by_depth[depth]
+                print(f"🔄 Processing depth {depth} ({len(depth_dirs)} directories)...")
                 
-                success = self.execute_claude_command(
-                    f"user:init-component-ai-docs project-root={self.project_root},component-dir={component_dir}",
-                    str(rel_path)
-                )
+                for component_dir in depth_dirs:
+                    rel_path = component_dir.relative_to(self.project_root)
+                    
+                    # Calculate relative path from component to project root
+                    rel_project_root = os.path.relpath(self.project_root, component_dir)
+                    
+                    success = self.execute_claude_command(
+                        f"user:init-component-ai-docs project-root={rel_project_root},component-dir=.",
+                        str(rel_path),
+                        working_dir=component_dir
+                    )
+                    
+                    if not success:
+                        return False
                 
-                if not success:
-                    return False
+                print(f"✅ Completed depth {depth}")
+                print()
         
         # Final summary
         print()
