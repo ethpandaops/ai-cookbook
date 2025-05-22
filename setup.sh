@@ -54,7 +54,7 @@ for command_file in "$COMMANDS_DIR"/*.md; do
         filename=$(basename "$command_file")
         cp "$command_file" "$TARGET_DIR/$filename"
         echo "   ✅ Copied: $filename"
-        ((commands_copied++))
+        commands_copied=$((commands_copied + 1))
     fi
 done
 
