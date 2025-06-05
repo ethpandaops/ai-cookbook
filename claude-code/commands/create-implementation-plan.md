@@ -4,11 +4,12 @@
 This command helps you create a detailed, well-structured implementation plan for a feature, script, or system enhancement. It provides a standardized template with proper scaffolding to ensure comprehensive planning with clear sections, measurable outcomes, and actionable steps.
 
 ## Important Notes
-- The plan should be detailed enough to serve as a complete reference for implementation
-- Include specific code examples where relevant
-- Structure should follow a logical progression from overview to specific implementation details
-- Each section should be clearly labeled with appropriate heading levels for hierarchy
-- Technical requirements and constraints should be explicitly stated
+- The plan MUST be in the form of a checklist that can be checked off as the tasks are completed.
+- The plan MUST be detailed enough to serve as a complete reference for implementation
+- The plan MUST include specific code examples where relevant
+- The plan MUST follow a logical progression from overview to specific implementation details
+- Each section SHOULD be clearly labeled with appropriate heading levels for hierarchy
+- Technical requirements and constraints SHOULD be explicitly stated
 - Prioritize modularity, maintainability, and clear component boundaries
 - Claude MUST create the plan in `./ai_plans/$PLAN_NAME.md`
 

@@ -151,7 +151,7 @@ class ProgressSpinner:
                 print("   ⏳ Waiting for response...")
                 lines_printed += 1
             
-            time.sleep(0.3)
+            time.sleep(0.5)  # Slower refresh rate to reduce flicker
 
 
 class DocumentationInitializer:
@@ -250,22 +250,20 @@ class DocumentationInitializer:
                                         for item in message['content']:
                                             if isinstance(item, dict):
                                                 if item.get('type') == 'text':
-                                                    text = item.get('text', '')
-                                                    if text:
-                                                        spinner.add_message(text)
+                                                    text = item.get('text', '').strip()
+                                                    # Only add non-empty text messages from Claude
+                                                    if text and len(text) > 10:  # Skip very short messages
+                                                        # Truncate long messages for display
+                                                        display_text = text[:100] + "..." if len(text) > 100 else text
+                                                        spinner.add_message(display_text)
                                                 elif item.get('type') == 'tool_use':
                                                     tool_name = item.get('name', 'unknown')
                                                     spinner.add_message(f"🔧 Using tool: {tool_name}")
                                 
-                                # Handle user messages (tool results)
+                                # Handle user messages (tool results) - skip these to reduce spam
                                 elif json_obj.get('type') == 'user' and 'message' in json_obj:
-                                    message = json_obj['message']
-                                    if 'content' in message and isinstance(message['content'], list):
-                                        for item in message['content']:
-                                            if isinstance(item, dict) and item.get('type') == 'tool_result':
-                                                content = item.get('content', '')
-                                                if content and len(content) < 100:  # Only show short tool results
-                                                    spinner.add_message(f"✅ {content[:50]}...")
+                                    # Skip user messages (tool results) to reduce console spam
+                                    pass
                                 
                                 # Handle system messages with stats
                                 elif json_obj.get('type') == 'system':
@@ -282,8 +280,8 @@ class DocumentationInitializer:
                                         
                         except json.JSONDecodeError:
                             # Not JSON, could be regular text output or partial JSON
-                            if line and self.verbose:
-                                spinner.add_message(f"📝 {line}")
+                            # Skip non-JSON output to reduce spam unless in verbose mode
+                            pass
                 
                 spinner.stop()
                 
