@@ -11,6 +11,7 @@ This command helps you create a detailed, well-structured implementation plan fo
 - Technical requirements and constraints should be explicitly stated
 - Prioritize modularity, maintainability, and clear component boundaries
 - Claude MUST create the plan in `./ai_plans/$PLAN_NAME.md`
+- When executing the plan, run implementation tasks as parallel subtasks when possible
 
 ## Tasks
 
