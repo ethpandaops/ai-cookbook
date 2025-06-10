@@ -448,7 +448,7 @@ class DocumentationInitializer:
         print("📊 Summary:")
         print("   • Will create 1 project root with .cursor/rules/ structure")
         print(f"   • Will create CLAUDE.md + CURSOR.mdc in {len(self.component_dirs)} component directories")
-        print("   • Components will be processed by depth level to ensure parent rules exist first")
+        print("   • Components will be processed by depth level (deepest first)")
         print("   • Each CURSOR.mdc includes glob patterns for auto-attachment")
         print("   • Each component CLAUDE.md references project root rules, and will create an equivalent rule in .cursor/rules/")
         print()
@@ -671,25 +671,12 @@ _This file will be auto-generated and customized by Claude AI._
         
         print()
         
-        # Execute project root initialization
-        print("📋 Initializing project-level documentation...")
-        success = self.execute_claude_command(
-            f"user:init-project-ai-docs project-root={self.project_root}",
-            "Project Root",
-            working_dir=self.project_root
-        )
-        
-        if not success:
-            return False
-        
-        print()
-        
         # Execute component initialization depth by depth
         if self.component_dirs:
-            print("📦 Processing components by depth (ensuring parent rules exist before child rules)...")
+            print("📦 Processing components by depth (deepest first)...")
             print()
             
-            for depth in sorted(self.component_dirs_by_depth.keys()):
+            for depth in sorted(self.component_dirs_by_depth.keys(), reverse=True):
                 depth_dirs = self.component_dirs_by_depth[depth]
                 print(f"🔄 Processing depth {depth} ({len(depth_dirs)} directories)...")
                 
@@ -710,6 +697,19 @@ _This file will be auto-generated and customized by Claude AI._
                 
                 print(f"✅ Completed depth {depth}")
                 print()
+        
+        # Execute project root initialization last
+        print("📋 Initializing project-level documentation...")
+        success = self.execute_claude_command(
+            f"user:init-project-ai-docs project-root={self.project_root}",
+            "Project Root",
+            working_dir=self.project_root
+        )
+        
+        if not success:
+            return False
+        
+        print()
         
         # Final summary
         print()
