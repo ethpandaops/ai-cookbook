@@ -52,27 +52,45 @@ Analyze the current component directory to understand the HIGH-LEVEL strategic p
 - What IMPORTANT CONSTRAINTS or DESIGN DECISIONS apply (e.g. "stateless design", "concurrent operations", "backwards compatibility required")
 - DO NOT enumerate every file, function, or feature - focus on the architectural essence
 
-### TASK 2: Analyze Parent Component Rules
-Analyze ONLY the direct parent component rules in the path from project root to current component. 
+### TASK 2: Analyze Existing Component Rules
+Analyze existing component rules to understand what's already documented and avoid duplication:
 
-**IMPORTANT - Direct Path Only:**
+**Child Component Analysis:**
+- Read all CURSOR.mdc files in direct child directories (one level down only)
+- Understand what architectural patterns and constraints are already captured
+- Identify what themes and patterns are already well-documented
+
+**Parent Component Analysis:**
+- Read ONLY the direct parent component rules in the path from project root to current component
 - Start at the project root (.cursor/rules/)
 - Follow ONLY the direct path to the current component directory
 - Do NOT read rules from sibling directories or unrelated components
-- Only read rules from directories that are direct ancestors in the path
 
 **Example:** For component at `backend/services/auth/`:
 - ✅ Read: Project root `.cursor/rules/`
 - ✅ Read: `backend/CURSOR.mdc` (if exists)
 - ✅ Read: `backend/services/CURSOR.mdc` (if exists)
+- ✅ Read: `backend/services/auth/handlers/CURSOR.mdc` (child)
+- ✅ Read: `backend/services/auth/middleware/CURSOR.mdc` (child)
 - ❌ Don't read: `frontend/CURSOR.mdc` (sibling)
 - ❌ Don't read: `backend/handlers/CURSOR.mdc` (sibling)
 - ❌ Don't read: `backend/services/user/CURSOR.mdc` (sibling)
 
-This ensures you have knowledge of parent rules without polluting context with unrelated component rules.
+This ensures you understand both parent context and existing child documentation to avoid duplication.
 
 ### TASK 3: Create a component-specific cursor rules file.
-Based on the analysis, create a SLIM, focused cursor rules file. Using your knowledge of the parent component rules, only add rules that are specific and unique to this component. Keep this concise - focus on the 2-3 most important strategic patterns that someone working on this component needs to know.
+Based on the analysis, create a SLIM, focused cursor rules file that COMPLEMENTS existing documentation:
+
+**Avoid Duplication:**
+- Do NOT repeat patterns already captured in child component rules
+- Do NOT repeat patterns already captured in parent component rules
+- Focus on UNIQUE architectural concerns for this specific component level
+
+**Focus Areas:**
+- Cross-cutting concerns that span multiple child components
+- Integration patterns between child components
+- Component-level constraints not covered by children
+- Orchestration or coordination patterns unique to this level
 
 This file will live in ./CURSOR.mdc
 
