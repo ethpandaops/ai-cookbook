@@ -168,7 +168,7 @@ class DocumentationInitializer:
         # Code file extensions to look for
         self.code_extensions = {
             "*.go", "*.ts", "*.js", "*.py", "*.rs", 
-            "*.java", "*.cpp", "*.c", "*.h", "*.md", "*.sh"
+            "*.java", "*.cpp", "*.c", "*.h", "*.md", "*.sh", "*.star"
         }
         
         # Directories to skip
