@@ -14,6 +14,7 @@ import subprocess
 import sys
 import time
 import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List, Optional
 
@@ -157,12 +158,14 @@ class ProgressSpinner:
 class DocumentationInitializer:
     """Main class for initializing AI documentation."""
     
-    def __init__(self, project_root: str = ".", dry_run: bool = False, verbose: bool = False):
+    def __init__(self, project_root: str = ".", dry_run: bool = False, verbose: bool = False, max_workers: int = 10):
         self.project_root = Path(project_root).resolve()
         self.dry_run = dry_run
         self.verbose = verbose
+        self.max_workers = max_workers
         self.component_dirs: List[Path] = []
         self.component_dirs_by_depth: dict[int, List[Path]] = {}
+        self.component_line_counts: dict[Path, int] = {}
         self.task_stats: List[TaskStats] = []
         
         # Code file extensions to look for
@@ -366,28 +369,97 @@ class DocumentationInitializer:
         except PermissionError:
             return False
     
+    def count_lines_in_directory(self, dir_path: Path) -> int:
+        """Count total lines of code in all matching files in a directory."""
+        total_lines = 0
+        try:
+            for pattern in self.code_extensions:
+                for file_path in dir_path.glob(pattern):
+                    if file_path.is_file():
+                        try:
+                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                lines = sum(1 for line in f if line.strip())  # Count non-empty lines
+                                total_lines += lines
+                        except Exception:
+                            # Skip files that can't be read
+                            pass
+            return total_lines
+        except PermissionError:
+            return 0
+    
+    def process_directory(self, root_path: Path) -> Optional[tuple[Path, int]]:
+        """Process a single directory and return path and line count if it contains code."""
+        # Skip the project root itself
+        if root_path == self.project_root:
+            return None
+        
+        # Skip directories that should be ignored
+        if self.should_skip_directory(root_path):
+            return None
+        
+        # Skip directories with no files
+        if not self.has_files(root_path):
+            return None
+        
+        # Check if directory contains code files
+        if self.has_code_files(root_path):
+            # Count lines of code in this directory
+            line_count = self.count_lines_in_directory(root_path)
+            if line_count > 0:  # Only include directories with actual code
+                return (root_path, line_count)
+        
+        return None
+
     def find_component_directories(self):
         """Find all directories that contain code files, organized by depth level."""
         all_component_dirs = []
         
-        for root, dirs, files in os.walk(self.project_root):
+        # Collect all directories to process
+        dirs_to_process = []
+        for root, _, _ in os.walk(self.project_root):
             root_path = Path(root)
+            if not self.should_skip_directory(root_path):
+                dirs_to_process.append(root_path)
+        
+        total_dirs = len(dirs_to_process)
+        print(f"🔍 Scanning {total_dirs} directories for code files (using {self.max_workers} threads)...")
+        
+        dirs_processed = 0
+        start_time = time.time()
+        
+        # Process directories in parallel
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Submit all tasks
+            future_to_dir = {executor.submit(self.process_directory, dir_path): dir_path 
+                           for dir_path in dirs_to_process}
             
-            # Skip the project root itself
-            if root_path == self.project_root:
-                continue
-            
-            # Skip directories that should be ignored
-            if self.should_skip_directory(root_path):
-                continue
-            
-            # Skip directories with no files
-            if not self.has_files(root_path):
-                continue
-            
-            # Check if directory contains code files
-            if self.has_code_files(root_path):
-                all_component_dirs.append(root_path)
+            # Process completed tasks
+            for future in as_completed(future_to_dir):
+                dirs_processed += 1
+                
+                # Show progress every 10 directories or at completion
+                if dirs_processed % 10 == 0 or dirs_processed == total_dirs:
+                    elapsed = time.time() - start_time
+                    rate = dirs_processed / elapsed if elapsed > 0 else 0
+                    eta = (total_dirs - dirs_processed) / rate if rate > 0 else 0
+                    print(f"   Progress: {dirs_processed}/{total_dirs} ({dirs_processed/total_dirs*100:.1f}%) | "
+                          f"Rate: {rate:.1f} dirs/sec | ETA: {eta:.1f}s", end='\r')
+                
+                try:
+                    result = future.result()
+                    if result:
+                        dir_path, line_count = result
+                        all_component_dirs.append(dir_path)
+                        self.component_line_counts[dir_path] = line_count
+                except Exception as e:
+                    dir_path = future_to_dir[future]
+                    self.log(f"Error processing {dir_path}: {e}")
+        
+        # Clear progress line
+        print(" " * 100, end='\r')
+        
+        elapsed = time.time() - start_time
+        print(f"✅ Scanned {total_dirs} directories in {elapsed:.1f}s ({total_dirs/elapsed:.1f} dirs/sec)")
         
         # Group directories by depth level (number of path parts from project root)
         self.component_dirs_by_depth = {}
@@ -408,6 +480,266 @@ class DocumentationInitializer:
         for depth in sorted(self.component_dirs_by_depth.keys()):
             self.component_dirs.extend(self.component_dirs_by_depth[depth])
     
+    def create_directory_strategies(self) -> dict:
+        """Create documentation strategies based on directory analysis."""
+        all_dirs = [str(d.relative_to(self.project_root)) for d in self.component_dirs]
+        
+        # Calculate statistics
+        line_counts = list(self.component_line_counts.values())
+        if line_counts:
+            avg_lines = sum(line_counts) / len(line_counts)
+            sorted_counts = sorted(line_counts, reverse=True)
+            percentile_75 = sorted_counts[int(len(sorted_counts) * 0.25)] if len(sorted_counts) >= 4 else avg_lines
+            percentile_50 = sorted_counts[int(len(sorted_counts) * 0.5)] if len(sorted_counts) >= 2 else avg_lines
+        else:
+            avg_lines = percentile_75 = percentile_50 = 0
+        
+        # Score and categorize directories
+        dir_info = []
+        for d in self.component_dirs:
+            rel_path = d.relative_to(self.project_root)
+            lines = self.component_line_counts.get(d, 0)
+            
+            # Calculate importance score
+            score = 0
+            reasons = []
+            
+            # Size factor
+            if lines > percentile_75:
+                score += 30
+                reasons.append("large codebase")
+            elif lines > percentile_50:
+                score += 20
+                reasons.append("substantial code")
+            elif lines > avg_lines:
+                score += 10
+                reasons.append("above average size")
+            
+            # Depth factor (prefer shallower directories)
+            depth = len(rel_path.parts)
+            if depth == 1:
+                score += 25
+                reasons.append("top-level")
+            elif depth == 2:
+                score += 15
+                reasons.append("second-level")
+            elif depth == 3:
+                score += 5
+            
+            # Name importance
+            path_str = str(rel_path).lower()
+            important_keywords = {
+                'src': 20, 'lib': 20, 'core': 25, 'api': 20,
+                'service': 15, 'model': 15, 'controller': 15,
+                'handler': 15, 'manager': 15, 'util': 5, 'utils': 5,
+                'helper': 5, 'common': 10, 'shared': 10,
+                'main': 20, 'app': 20, 'server': 20, 'client': 20
+            }
+            
+            for keyword, points in important_keywords.items():
+                if keyword in path_str.split('/'):
+                    score += points
+                    reasons.append(f"'{keyword}' component")
+                    break
+            
+            # Negative patterns
+            if any(word in path_str for word in ['test', 'tests', 'mock', 'example', 'demo', 'sample']):
+                score *= 0.5
+                reasons = [r for r in reasons if r != "test/example code"]
+                reasons.append("test/example code")
+            
+            dir_info.append({
+                'path': str(rel_path),
+                'lines': lines,
+                'score': score,
+                'depth': depth,
+                'reasons': reasons
+            })
+        
+        # Sort by score
+        dir_info.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Create strategies
+        minimal_threshold = 50  # High score threshold
+        smart_threshold = 25    # Medium score threshold
+        
+        minimal_dirs = [d['path'] for d in dir_info if d['score'] >= minimal_threshold]
+        smart_dirs = [d['path'] for d in dir_info if d['score'] >= smart_threshold]
+        
+        # Ensure we have at least some directories in minimal/smart
+        if len(minimal_dirs) < 5 and len(dir_info) >= 5:
+            minimal_dirs = [d['path'] for d in dir_info[:5]]
+        if len(smart_dirs) < 10 and len(dir_info) >= 10:
+            smart_dirs = [d['path'] for d in dir_info[:10]]
+        
+        # Build reasoning
+        minimal_reasons = []
+        smart_reasons = []
+        
+        if minimal_dirs:
+            top_dirs = dir_info[:len(minimal_dirs)]
+            common_reasons = {}
+            for d in top_dirs:
+                for r in d['reasons']:
+                    common_reasons[r] = common_reasons.get(r, 0) + 1
+            top_reasons = sorted(common_reasons.items(), key=lambda x: x[1], reverse=True)[:3]
+            minimal_reasons = [r[0] for r in top_reasons]
+        
+        if smart_dirs:
+            top_dirs = dir_info[:len(smart_dirs)]
+            common_reasons = {}
+            for d in top_dirs:
+                for r in d['reasons']:
+                    common_reasons[r] = common_reasons.get(r, 0) + 1
+            top_reasons = sorted(common_reasons.items(), key=lambda x: x[1], reverse=True)[:3]
+            smart_reasons = [r[0] for r in top_reasons]
+        
+        return {
+            "minimal": {
+                "directories": minimal_dirs,
+                "reasoning": f"Focus on {', '.join(minimal_reasons[:2])} directories",
+                "count": len(minimal_dirs),
+                "details": [d for d in dir_info if d['path'] in minimal_dirs]
+            },
+            "smart": {
+                "directories": smart_dirs,
+                "reasoning": f"Cover {', '.join(smart_reasons[:2])} with good architecture coverage",
+                "count": len(smart_dirs),
+                "details": [d for d in dir_info if d['path'] in smart_dirs]
+            },
+            "full": {
+                "directories": all_dirs,
+                "reasoning": "Document every directory containing code",
+                "count": len(all_dirs),
+                "details": dir_info
+            }
+        }
+    
+    
+    def select_strategy(self, strategies: dict) -> str:
+        """Present strategies to user and get their selection."""
+        print("\n📊 Documentation Strategy Options")
+        print("=================================\n")
+        
+        # Show each strategy
+        for strategy_name in ['minimal', 'smart', 'full']:
+            strategy = strategies.get(strategy_name, {})
+            count = strategy.get('count', 0)
+            reasoning = strategy.get('reasoning', '')
+            
+            print(f"📌 {strategy_name.upper()} Strategy ({count} directories)")
+            print(f"   {reasoning}")
+            
+            if strategy_name != 'full' and 'directories' in strategy and 'details' in strategy:
+                print("   Top directories:")
+                for detail in strategy['details'][:10]:
+                    reasons_str = ", ".join(detail['reasons'][:2])
+                    print(f"     - {detail['path']} ({detail['lines']:,} lines, score: {detail['score']}, {reasons_str})")
+                if len(strategy['directories']) > 10:
+                    print(f"     ... and {len(strategy['directories']) - 10} more")
+            print()
+        
+        # Get user choice
+        while True:
+            try:
+                choice = input("🤔 Select strategy [minimal/smart/full/manual] (default: smart): ").strip().lower()
+                if not choice:
+                    choice = 'smart'
+                if choice in ['minimal', 'smart', 'full']:
+                    print(f"✅ Selected {choice.upper()} strategy")
+                    return choice
+                elif choice == 'manual':
+                    print("✅ Selected MANUAL strategy - you'll choose directories interactively")
+                    return choice
+                else:
+                    print("❌ Invalid choice. Please enter 'minimal', 'smart', 'full', or 'manual'")
+            except KeyboardInterrupt:
+                print("\n❌ Cancelled by user")
+                sys.exit(1)
+    
+    def select_directories_manually(self) -> List[str]:
+        """Let user manually select directories to document."""
+        print("\n📂 Manual Directory Selection")
+        print("============================")
+        print("Review each directory and decide whether to document it.")
+        print("Type 'y' to include, 'n' to skip, 'q' to finish selection\n")
+        
+        selected = []
+        dir_info = []
+        
+        # Prepare directory info sorted by score
+        for d in self.component_dirs:
+            rel_path = d.relative_to(self.project_root)
+            lines = self.component_line_counts.get(d, 0)
+            dir_info.append({
+                'path': d,
+                'rel_path': str(rel_path),
+                'lines': lines
+            })
+        
+        # Sort by lines (descending) for better review order
+        dir_info.sort(key=lambda x: x['lines'], reverse=True)
+        
+        for i, info in enumerate(dir_info):
+            print(f"\n[{i+1}/{len(dir_info)}] {info['rel_path']} ({info['lines']:,} lines)")
+            
+            while True:
+                choice = input("   Include? [y/n/q]: ").strip().lower()
+                if choice == 'y':
+                    selected.append(info['rel_path'])
+                    print("   ✅ Added to documentation")
+                    break
+                elif choice == 'n':
+                    print("   ⏭️  Skipped")
+                    break
+                elif choice == 'q':
+                    print("\n✅ Manual selection complete")
+                    return selected
+                else:
+                    print("   ❌ Please enter 'y', 'n', or 'q'")
+        
+        print(f"\n✅ Manual selection complete: {len(selected)} directories selected")
+        return selected
+
+    def apply_strategy(self, strategy_name: str, strategies: dict):
+        """Apply the selected strategy to filter component directories."""
+        if strategy_name == 'full':
+            # Keep all directories
+            return
+        elif strategy_name == 'manual':
+            # Manual selection
+            selected_paths = self.select_directories_manually()
+            selected_dirs = set()
+            for path_str in selected_paths:
+                dir_path = self.project_root / path_str
+                if dir_path in self.component_dirs:
+                    selected_dirs.add(dir_path)
+        else:
+            # Use predefined strategy
+            strategy = strategies.get(strategy_name, {})
+            selected_dirs = set()
+            for dir_str in strategy.get('directories', []):
+                dir_path = self.project_root / dir_str
+                if dir_path in self.component_dirs:
+                    selected_dirs.add(dir_path)
+        
+        # Update component directories
+        self.component_dirs = sorted(list(selected_dirs))
+        
+        # Rebuild depth grouping
+        self.component_dirs_by_depth = {}
+        for component_dir in self.component_dirs:
+            rel_path = component_dir.relative_to(self.project_root)
+            depth = len(rel_path.parts)
+            
+            if depth not in self.component_dirs_by_depth:
+                self.component_dirs_by_depth[depth] = []
+            self.component_dirs_by_depth[depth].append(component_dir)
+        
+        # Sort directories within each depth level
+        for depth in self.component_dirs_by_depth:
+            self.component_dirs_by_depth[depth].sort()
+
     def show_plan(self):
         """Display the documentation plan."""
         print()
@@ -438,9 +770,10 @@ class DocumentationInitializer:
                 
                 for i, component_dir in enumerate(depth_dirs):
                     rel_path = component_dir.relative_to(self.project_root)
+                    lines = self.component_line_counts.get(component_dir, 0)
                     
                     prefix = "   └──" if i == len(depth_dirs) - 1 else "   ├──"
-                    print(f"   {prefix} {rel_path}/")
+                    print(f"   {prefix} {rel_path}/ ({lines:,} lines)")
                     print(f"       └── CLAUDE.md + CURSOR.mdc")
                 print()
         
@@ -630,10 +963,15 @@ _This file will be auto-generated and customized by Claude AI._
         print(f"   ⏱️  Total time: {total_mins:02d}:{total_secs:02d}")
         print(f"   💰 Total cost: ${total_cost:.4f}")
         print(f"   🔤 Total tokens: {total_tokens:,}")
+        print(f"   🧵 Max workers used: {self.max_workers}")
         
         if total_tokens > 0:
             avg_cost_per_token = total_cost / total_tokens * 1000  # Cost per 1K tokens
             print(f"   📊 Avg cost/1K tokens: ${avg_cost_per_token:.4f}")
+        
+        if successful_tasks > 0 and total_duration > 0:
+            avg_time_per_task = total_duration / successful_tasks
+            print(f"   ⚡ Avg time per task: {avg_time_per_task:.1f}s")
         
         print("="*80)
     
@@ -654,9 +992,23 @@ _This file will be auto-generated and customized by Claude AI._
         # Planning phase
         print("📋 Planning documentation structure...")
         print()
-        print("🔍 Scanning project structure...")
         
         self.find_component_directories()
+        
+        # Strategy selection
+        print()
+        total_lines = sum(self.component_line_counts.values())
+        print(f"📊 Found {len(self.component_dirs)} directories with {total_lines:,} total lines of code.")
+        print("Let's choose a documentation strategy.")
+        print()
+        
+        # Create and select strategy
+        print("📊 Analyzing project structure...")
+        strategies = self.create_directory_strategies()
+        selected_strategy = self.select_strategy(strategies)
+        self.apply_strategy(selected_strategy, strategies)
+        print()
+        
         self.show_plan()
         
         # Confirmation
@@ -673,30 +1025,68 @@ _This file will be auto-generated and customized by Claude AI._
         
         # Execute component initialization depth by depth
         if self.component_dirs:
-            print("📦 Processing components by depth (deepest first)...")
+            print(f"📦 Processing components by depth (deepest first) using {self.max_workers} threads...")
             print()
+            
+            total_dirs = len(self.component_dirs)
+            processed_dirs = 0
+            failed_dirs = []
             
             for depth in sorted(self.component_dirs_by_depth.keys(), reverse=True):
                 depth_dirs = self.component_dirs_by_depth[depth]
                 print(f"🔄 Processing depth {depth} ({len(depth_dirs)} directories)...")
                 
-                for component_dir in depth_dirs:
-                    rel_path = component_dir.relative_to(self.project_root)
-                    
-                    # Calculate relative path from component to project root
-                    rel_project_root = os.path.relpath(self.project_root, component_dir)
-                    
-                    success = self.execute_claude_command(
-                        f"user:init-component-ai-docs project-root={rel_project_root},component-dir=.",
-                        str(rel_path),
-                        working_dir=component_dir
-                    )
-                    
-                    if not success:
-                        return False
+                # Process directories at this depth in parallel
+                start_time = time.time()
                 
-                print(f"✅ Completed depth {depth}")
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    # Create tasks for each directory
+                    future_to_dir = {}
+                    for component_dir in depth_dirs:
+                        rel_path = component_dir.relative_to(self.project_root)
+                        rel_project_root = os.path.relpath(self.project_root, component_dir)
+                        
+                        future = executor.submit(
+                            self.execute_claude_command,
+                            f"user:init-component-ai-docs project-root={rel_project_root},component-dir=.",
+                            str(rel_path),
+                            working_dir=component_dir
+                        )
+                        future_to_dir[future] = component_dir
+                    
+                    # Process completed tasks
+                    for future in as_completed(future_to_dir):
+                        processed_dirs += 1
+                        component_dir = future_to_dir[future]
+                        rel_path = component_dir.relative_to(self.project_root)
+                        
+                        try:
+                            success = future.result()
+                            if not success:
+                                failed_dirs.append(str(rel_path))
+                                print(f"   ❌ Failed: {rel_path}")
+                        except Exception as e:
+                            failed_dirs.append(str(rel_path))
+                            print(f"   ❌ Error processing {rel_path}: {e}")
+                        
+                        # Show progress - don't overwrite on every update to see failures
+                        if processed_dirs % 5 == 0 or processed_dirs == total_dirs:
+                            elapsed = time.time() - start_time
+                            # Clear the line and print progress
+                            print(" " * 80, end='\r')
+                            print(f"   Progress: {processed_dirs}/{total_dirs} ({processed_dirs/total_dirs*100:.1f}%)", end='\r')
+                
+                elapsed = time.time() - start_time
+                print(f"✅ Completed depth {depth} in {elapsed:.1f}s")
                 print()
+            
+            if failed_dirs:
+                print(f"\n⚠️  {len(failed_dirs)} directories failed to process:")
+                for dir_path in failed_dirs[:10]:
+                    print(f"   - {dir_path}")
+                if len(failed_dirs) > 10:
+                    print(f"   ... and {len(failed_dirs) - 10} more")
+                return False
         
         # Execute project root initialization last
         print("📋 Initializing project-level documentation...")
@@ -748,6 +1138,9 @@ Examples:
 
   # Dry run to see what would happen
   %(prog)s --dry-run
+
+  # Run with 20 parallel threads for faster execution
+  %(prog)s --max-workers 20
         """
     )
     
@@ -770,13 +1163,21 @@ Examples:
         help="Enable verbose output"
     )
     
+    parser.add_argument(
+        "-w", "--max-workers",
+        type=int,
+        default=10,
+        help="Maximum number of concurrent threads (default: 10)"
+    )
+    
     args = parser.parse_args()
     
     # Initialize and run
     initializer = DocumentationInitializer(
         project_root=args.project_root,
         dry_run=args.dry_run,
-        verbose=args.verbose
+        verbose=args.verbose,
+        max_workers=args.max_workers
     )
     
     success = initializer.run()
