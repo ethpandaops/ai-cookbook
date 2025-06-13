@@ -50,17 +50,17 @@ After running `setup.sh`, the commands will be available in Claude Code. You can
 
 ### 📚 Initialize AI Documentation in Any Repository
 
-Use the `init-ai-docs` script to set up comprehensive AI documentation in any project:
+Use the `init-ai-docs.py` script to set up comprehensive AI documentation in any project:
 
 ```bash
 # Initialize docs in current directory
-init-ai-docs
+init-ai-docs.py
 
 # Initialize docs in specific project
-init-ai-docs /path/to/project
+init-ai-docs.py /path/to/project
 
 # Preview what will be created
-init-ai-docs --dry-run
+init-ai-docs.py --dry-run
 ```
 
 This creates:
