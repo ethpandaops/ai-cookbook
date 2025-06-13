@@ -48,6 +48,30 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 
 After running `setup.sh`, the commands will be available in Claude Code. You can use them by referencing the command name in your Claude Code sessions.
 
+### 📚 Initialize AI Documentation in Any Repository
+
+Use the `init-ai-docs` script to set up comprehensive AI documentation in any project:
+
+```bash
+# Initialize docs in current directory
+init-ai-docs
+
+# Initialize docs in specific project
+init-ai-docs /path/to/project
+
+# Preview what will be created
+init-ai-docs --dry-run
+```
+
+This creates:
+- Project-level CLAUDE.md and .cursor/rules/
+- Component-level CLAUDE.md files
+- Compatible with Cursor, Claude Code, and other AI tools
+
+See [full documentation](docs/init-ai-docs.md) for detailed usage and options.
+
+### Adding New Commands
+
 To add new commands:
 1. Create or modify files in the `claude-code/commands/` directory
 2. Commit and push your changes
