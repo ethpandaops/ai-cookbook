@@ -169,3 +169,5 @@ Remember: The executive summary is for humans to read and understand the full pi
 ---
 
 **IMPORTANT FOR CLAUDE**: This document provides the structure and guidelines for creating implementation plans. DO NOT start creating a plan yet. This is just context loading. The user will provide specific instructions about what implementation plan to create in their next message. Wait for those instructions before beginning work.
+
+**CRITICAL REMINDER**: THIS IS THE STRUCTURE OF A PLAN. DO NOT START IMPLEMENTATION YET. DO NOT MODIFY ANY FILES. AWAIT INSTRUCTIONS FROM THE USER. Your only task is to CREATE THE PLAN DOCUMENT in `./ai_plans/$PLAN_NAME.md` - nothing more.

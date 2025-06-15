@@ -1166,8 +1166,8 @@ Examples:
     parser.add_argument(
         "-w", "--max-workers",
         type=int,
-        default=10,
-        help="Maximum number of concurrent threads (default: 10)"
+        default=1,
+        help="Maximum number of concurrent threads (default: 1). Warning: enabling more than 1 worker may cause a race condition with Claude Code. Use with caution."
     )
     
     args = parser.parse_args()
