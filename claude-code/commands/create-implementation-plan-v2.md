@@ -1,18 +1,21 @@
 # Create Implementation Plan
 
 ## Overview
-This command generates a comprehensive implementation plan that serves as both a user-facing roadmap and Claude's technical reference. The plan consists of two key parts:
+Ultrathink. This command generates a comprehensive implementation plan that serves as both a user-facing roadmap and Claude's technical reference. **CRITICAL: This command is for PLANNING ONLY. Claude must NOT implement anything during plan creation.**
 
-1. **User-Facing Executive Summary**: A detailed, fleshed-out overview that explains the what, why, and how of the implementation in clear business and technical terms. This section should be thorough enough that stakeholders can understand the full scope and impact of the work.
+The plan consists of two key parts:
 
-2. **Claude's Implementation Reference**: Structured tasks with technical specifics, code examples, and actionable checklists that Claude will use during actual implementation. These tasks are more granular and technical in nature.
+1. **User-Facing Executive Summary**: A detailed overview that explains what is changing and why specific changes are needed. Includes data flow diagrams when relevant.
+
+2. **Claude's Implementation Reference**: Structured tasks with technical specifics and actionable checklists for future implementation.
 
 ### Key Principles
-- **MAXIMIZE PARALLELIZATION**: Claude has the ability to execute multiple tasks concurrently. This is CRITICAL for performance. Structure plans to identify and execute independent tasks in parallel whenever possible.
-- **Research Through Subtasks**: When creating the plan, Claude should use subtasks to conduct research and gather any missing information from the user. This ensures the plan is complete and accurate before finalization.
-- **Checklist Format**: All implementation tasks MUST be in checklist format for progress tracking
-- **Minimize Sequential Dependencies**: Analyze task dependencies carefully and structure the plan to reduce unnecessary sequential task flow. Only enforce sequential ordering when absolutely required.
-- **Actionable Steps**: Each task must contain enough context and detail to be independently executable
+- **PLANNING ONLY**: Never implement during plan creation. Research and plan only.
+- **MAXIMIZE PARALLELIZATION**: Structure plans to identify independent tasks for parallel execution.
+- **Research Through Subtasks**: Use subtasks to gather missing information from the user.
+- **Checklist Format**: All implementation tasks MUST be in checklist format.
+- **Minimize Sequential Dependencies**: Only enforce sequential ordering when absolutely required.
+- **Actionable Steps**: Each task must contain enough context for independent execution.
 - **Location**: Plans are created in `./ai_plans/$PLAN_NAME.md`
 
 ## Plan Structure
@@ -24,12 +27,12 @@ Create a comprehensive overview that stakeholders can read to understand the ful
 # [Feature/System Name] Implementation Plan
 
 ## Executive Summary
-> A detailed 3-5 paragraph overview that covers:
-> - Business context and problem statement
-> - Proposed solution and its benefits
-> - High-level technical approach
-> - Expected impact and outcomes
-> - Timeline and resource considerations
+> A concise overview that covers:
+> - Problem statement
+> - Proposed solution
+> - Technical approach
+> - Data flow (when relevant)
+> - Expected outcomes
 
 ## Goals & Objectives
 ### Primary Goals
@@ -42,16 +45,31 @@ Create a comprehensive overview that stakeholders can read to understand the ful
 
 ## Solution Overview
 ### Approach
-[2-3 paragraphs explaining the solution architecture, key design decisions, and rationale]
+[Concise explanation of solution architecture and key changes]
 
 ### Key Components
-1. **[Component Name]**: [Business purpose and technical role]
-2. **[Component Name]**: [Business purpose and technical role]
+1. **[Component Name]**: [What changes and why]
+2. **[Component Name]**: [What changes and why]
+
+### Architecture Diagram
+[ASCII diagram when system architecture changes - omit if not relevant]
+```
+[User] → [API] → [Database]
+   ↓        ↓         ↓
+[Cache] → [Queue] → [Service]
+```
+
+### Data Flow
+[ASCII diagram showing data movement when relevant]
+```
+Input → Process → Output
+  ↓       ↓        ↓
+Validate → Transform → Store
+```
 
 ### Expected Outcomes
-- [Specific, measurable business outcomes]
-- [Technical improvements and metrics]
-- [User experience enhancements]
+- [Specific, measurable outcomes]
+- [Technical improvements]
 ```
 
 ### 2. Technical Implementation (Claude-Focused)
@@ -95,25 +113,25 @@ Structured tasks for actual implementation work with **EXPLICIT PARALLELIZATION*
 ## Creating the Plan
 
 ### STEP 1: Research & Discovery
-**Use subtasks to gather all necessary information:**
+**Use subtasks to gather necessary information:**
 - Analyze existing codebase structure
-- Identify current limitations or pain points
-- Research similar implementations or patterns
-- **Ask the user for any unclear requirements or preferences**
+- Identify current limitations
+- Research similar implementations
+- **Ask the user for any unclear requirements**
 
 ### STEP 2: Dependency Analysis (CRITICAL)
 **Analyze task dependencies to maximize parallelization:**
 - Identify which tasks can run completely independently
 - Group tasks that share no dependencies for parallel execution
 - Map out the minimal sequential dependencies
-- Structure the plan to reduce total execution time by running independent tasks concurrently
+- Structure the plan to maximize concurrent execution
 
 ### STEP 3: Draft Executive Summary
-Write a comprehensive overview that addresses:
-- Problem statement and business case
+Write a concise overview that addresses:
+- Problem statement
 - Solution architecture and approach
-- Expected benefits and outcomes
-- Risk assessment and mitigation strategies
+- Expected outcomes
+- Data flow (when relevant)
 
 ### STEP 4: Define Implementation Tasks with Parallel Groups
 Create detailed, actionable tasks organized by parallel execution groups:
@@ -125,10 +143,10 @@ Create detailed, actionable tasks organized by parallel execution groups:
 
 ### STEP 5: Validate & Optimize for Parallelization
 Before finalizing:
-- Review the plan to identify any additional parallelization opportunities
+- Review for additional parallelization opportunities
 - Ensure task groupings maximize concurrent execution
-- Verify that dependencies are truly necessary (not just convenient)
-- Consider breaking large sequential tasks into smaller parallel subtasks
+- Verify dependencies are truly necessary
+- Break large sequential tasks into smaller parallel subtasks
 
 ## Example Usage
 
@@ -151,23 +169,31 @@ Before finalizing:
 
 ## Best Practices
 
-1. **PARALLELIZE AGGRESSIVELY**: This is the #1 priority. Always look for opportunities to run tasks concurrently. Question every sequential dependency.
-2. **Research First**: Always use subtasks to gather complete information before writing the plan
-3. **Ask Questions**: Don't assume - ask the user for clarification on requirements
+1. **PARALLELIZE AGGRESSIVELY**: Always look for opportunities to run tasks concurrently. Question every sequential dependency.
+2. **Research First**: Use subtasks to gather complete information before writing the plan
+3. **Ask Questions**: Ask the user for clarification on requirements
 4. **Be Specific**: Include concrete details, file paths, and code examples
-5. **Consider Scale**: Address performance, security, and maintainability upfront
-6. **Optimize Execution Time**: Structure the plan to minimize total runtime by maximizing parallel execution
-7. **Clear Dependencies**: Only enforce sequential ordering when absolutely necessary - challenge every dependency
+5. **Consider Scale**: Address performance, security, and maintainability
+6. **Maximize Parallel Execution**: Structure the plan to maximize concurrent execution
+7. **Clear Dependencies**: Only enforce sequential ordering when absolutely necessary
 
 ### Parallelization Examples
 - **Good**: "Tasks A.1, A.2, and A.3 can all run in parallel as they touch different parts of the codebase"
-- **Better**: "Execute all 5 foundation tasks simultaneously, reducing setup time from 50 minutes sequential to 10 minutes parallel"
+- **Better**: "Execute all 5 foundation tasks simultaneously"
 - **Best**: "Group A (5 tasks) runs fully parallel, Group B (3 tasks) starts after A completes but B tasks run parallel with each other"
 
-Remember: The executive summary is for humans to read and understand the full picture. The implementation tasks are for Claude to execute with MAXIMUM PARALLELIZATION. Both should be detailed but serve different audiences.
+Remember: The executive summary is for humans to understand what is changing. The implementation tasks are for Claude to execute with MAXIMUM PARALLELIZATION. Both should be concise and focused.
 
 ---
 
-**IMPORTANT FOR CLAUDE**: This document provides the structure and guidelines for creating implementation plans. DO NOT start creating a plan yet. This is just context loading. The user will provide specific instructions about what implementation plan to create in their next message. Wait for those instructions before beginning work.
+---
 
-**CRITICAL REMINDER**: THIS IS THE STRUCTURE OF A PLAN. DO NOT START IMPLEMENTATION YET. DO NOT MODIFY ANY FILES. AWAIT INSTRUCTIONS FROM THE USER. Your only task is to CREATE THE PLAN DOCUMENT in `./ai_plans/$PLAN_NAME.md` - nothing more.
+**CRITICAL REMINDER FOR CLAUDE**: 
+- This command is for PLANNING ONLY - never implement during plan creation
+- Research first, then plan
+- Focus on what changes and why specific changes are needed
+- Include ASCII diagrams only when they clarify architecture or data flow
+- Keep all explanations concise and actionable
+- Maximize parallelization opportunities
+
+**IMPORTANT**: This document provides guidelines for creating implementation plans. DO NOT start creating a plan yet. Wait for the user's specific instructions about what implementation plan to create.
