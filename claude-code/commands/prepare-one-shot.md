@@ -18,20 +18,44 @@ When the user provides their request, execute WITHOUT asking for confirmation:
 - Research the codebase using parallel searches
 - Create an internal implementation plan
 - Identify all tasks and dependencies
-- Structure for maximum parallelization
+- **CRITICAL**: Structure plan to maximize parallel execution
+- Group all independent tasks for simultaneous execution via Task tool
 
 ### Issue Creation Phase
-Create a GitHub issue with your planning findings:
+Create a GitHub issue with your planning findings using `gh issue create`:
 1. Title: Clear, action-oriented summary of what needs to be done
-2. Body must include:
-   - **Problem**: What needs to be solved/implemented (synthesized, not user's direct text)
-   - **Context**: Current state of the codebase relevant to this change
-   - **Proposed Solution**: Technical approach based on your research
-   - **Implementation Plan**: High-level tasks that need to be completed
-   - **Acceptance Criteria**: What defines this issue as complete
-   - **Technical Details**: Any specific considerations, dependencies, or constraints discovered during planning
+2. Body must be VERBOSE and include:
+   - **Problem**: Specific technical problem with code references
+   - **Current State**: 
+     - Exact files and line numbers that need changes
+     - Current implementation details with code snippets
+     - Specific functions/classes/modules affected
+   - **Proposed Changes**:
+     - File-by-file breakdown of modifications needed
+     - New files to create with their purpose
+     - Functions to add/modify/remove with signatures
+     - Specific code patterns to implement
+   - **Implementation Tasks** (with file paths):
+     - Task 1: Create `path/to/file.ts` with XYZ functionality
+     - Task 2: Modify `existingFile.ts:45-67` to add ABC method
+     - Task 3: Update `config.json` to include new settings
+   - **Technical Specifications**:
+     - API endpoints with routes and payloads
+     - Database schema changes with field types
+     - Dependencies to add with versions
+     - Configuration changes needed
+   - **Testing Requirements**:
+     - Specific test files to create/update
+     - Test cases that must pass
+     - Performance benchmarks if applicable
+   - **Acceptance Criteria**:
+     - Concrete, measurable outcomes
+     - Specific commands that should work
+     - Expected behavior with examples
 
-The issue should be self-contained - someone reading it should understand exactly what needs to be done without any additional context.
+Include code blocks, file paths, line numbers, and concrete implementation details. NO vague descriptions.
+
+IMPORTANT: Only use `gh` CLI for all GitHub interactions (issues, PRs, checks). Never use fetch, curl, or web requests as repos may be private.
 
 ### Implementation Phase
 1. Create semantic branch using format: `<type>/<description>`
@@ -43,17 +67,29 @@ The issue should be self-contained - someone reading it should understand exactl
    - `test/` - Test additions or changes
    - `chore/` - Maintenance tasks
 
-2. Implement changes using parallel subtasks:
-   - Use the Task tool to execute multiple independent tasks simultaneously
-   - Group tasks that have no dependencies for parallel execution
-   - Execute all subtasks with maximum parallelization
+2. **CRITICAL - PARALLEL IMPLEMENTATION REQUIRED**:
+   - **MUST use the Task tool** to execute multiple independent tasks simultaneously
+   - **NEVER execute tasks sequentially** unless there are explicit dependencies
+   - **ALWAYS group independent tasks** for parallel execution
+   - **MAXIMIZE parallelization** - if 5 tasks can run independently, launch ALL 5 at once
+   - Example: If implementing a feature that needs:
+     - Database schema changes
+     - API endpoint creation
+     - Frontend component updates
+     - Test file creation
+     - Documentation updates
+   - ALL of these should be launched as parallel Task invocations in a single message
+   
+3. For each parallel task group:
    - Make atomic, focused commits for each completed subtask
    - Run tests and linting after implementation
    - Fix any failures before proceeding
+   
+**FAILURE TO USE PARALLEL TASKS WILL RESULT IN INEFFICIENT IMPLEMENTATION**
 
 ### PR Creation Phase
 1. Push branch to remote
-2. Create PR with this exact format:
+2. Create PR using `gh pr create` with this exact format:
 
 ```markdown
 ## What
@@ -100,7 +136,9 @@ IMPORTANT: When using the Bash tool for CI monitoring commands, always specify a
 ## Critical Rules
 - **NO planning output** - Keep all planning internal
 - **NO confirmations** - Execute the entire workflow automatically
+- **PARALLEL EXECUTION MANDATORY** - MUST use Task tool for parallel implementation
 - **Minimal PR** - Keep PR description under 10 lines
 - **Smart timeouts** - Set appropriate timeout parameter when calling Bash tool based on expected duration
 - **Fix until green** - Continue fixing and monitoring until CI passes
 - **One continuous flow** - Complete everything without stopping
+- **GitHub via gh only** - All GitHub interactions MUST use `gh` CLI, never use curl/fetch/web requests
