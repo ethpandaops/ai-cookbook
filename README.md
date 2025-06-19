@@ -70,6 +70,37 @@ This creates:
 
 See [full documentation](docs/init-ai-docs.md) for detailed usage and options.
 
+## 🛠️ Claude Code Commands
+
+The following commands are available after running `setup.sh`:
+
+### `init-project-ai-docs`
+Initializes top-level AI documentation for the entire project with foundational structure and project-wide rules. Use this when setting up AI documentation for a new project to establish consistent coding standards and development workflows.
+
+### `prime-context`
+Reads and loads project context files (README.md, CLAUDE.md, docs) into Claude's working memory. Use this at the start of a Claude session to ensure Claude understands your project structure and conventions.
+
+### `init-component-ai-docs`
+Initializes AI documentation for a specific component/directory within a project with component-specific rules. Use this when adding AI documentation to individual components or modules within an existing project structure.
+
+### `parallel-repository-tasks`
+Executes the same action across multiple repositories in parallel for batch operations. Use this when you need to analyze patterns, implement changes, or audit multiple repositories simultaneously.
+
+### `create-implementation-plan`
+Creates a detailed implementation plan with scaffolding for features or system enhancements (deprecated - use v2). Use this when you need a structured approach to implementing complex features with clear milestones.
+
+### `create-implementation-plan-v2`
+Generates comprehensive implementation plans optimized for maximum parallelization during execution. Use this for planning complex features where you want Claude to identify and execute independent tasks concurrently.
+
+### `eip`
+Analyzes Ethereum Improvement Proposals by fetching content and optionally deep-diving into implementations. Use this when you need to understand an EIP's specifications and see how various clients have implemented it.
+
+### `create-feedback-loop`
+Creates a temporary feedback loop script that iterates with Claude until a success condition is met. Use this when you need Claude to repeatedly attempt a task (like fixing tests or meeting performance targets) until it succeeds.
+
+### `create-presentation`
+Creates succinct and effective presentations in Marp format with automatic HTML generation. Use this when you need to generate professional presentations from complex topics with clear, space-efficient slides.
+
 ### Adding New Commands
 
 To add new commands:
