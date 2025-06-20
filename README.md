@@ -92,6 +92,9 @@ Creates a detailed implementation plan with scaffolding for features or system e
 ### `create-implementation-plan-v2`
 Generates comprehensive implementation plans optimized for maximum parallelization during execution. Use this for planning complex features where you want Claude to identify and execute independent tasks concurrently.
 
+### `review-implementation-plan`
+Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usally run after `create-implementation-plan-v2` has generated the plan.
+
 ### `eip`
 Analyzes Ethereum Improvement Proposals by fetching content and optionally deep-diving into implementations. Use this when you need to understand an EIP's specifications and see how various clients have implemented it.
 
@@ -103,9 +106,6 @@ Creates succinct and effective presentations in Marp format with automatic HTML 
 
 ### `prepare-one-shot`
 Enables one-shot implementation mode for automated end-to-end feature development with issue creation, parallel implementation, and PR creation. Use this when you want Claude to autonomously implement a complete feature from planning through CI monitoring without manual intervention.
-
-### `review-implementation-plan`
-Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usally run after `create-implementation-plan-v2` has generated the plan.
 
 ### Adding New Commands
 
