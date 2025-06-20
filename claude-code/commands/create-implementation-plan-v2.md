@@ -78,6 +78,11 @@ Structured tasks for actual implementation work with **EXPLICIT PARALLELIZATION*
 ```markdown
 ## Implementation Tasks
 
+### CRITICAL IMPLEMENTATION RULES
+1. **NO PLACEHOLDER CODE**: Every implementation must be production-ready. NEVER write "TODO", "in a real implementation", or similar placeholders unless explicitly requested by the user.
+2. **CROSS-DIRECTORY TASKS**: Group related changes across directories into single tasks to ensure consistency. Never create isolated changes that require follow-up work in sibling directories.
+3. **COMPLETE IMPLEMENTATIONS**: Each task must fully implement its feature including all consumers, type updates, and integration points.
+
 ### Parallel Execution Groups
 
 #### Group A: Independent Foundation Tasks (Execute ALL in parallel)
@@ -94,15 +99,29 @@ Structured tasks for actual implementation work with **EXPLICIT PARALLELIZATION*
   - Dependencies: None (can run immediately)
 
 #### Group B: Core Implementation (Execute after Group A completes)
-- [ ] **Task B.1**: [Business logic implementation]
+- [ ] **Task B.1**: [Business logic implementation WITH all consumer updates]
+  - Files to modify across directories:
+    - src/core/logic.ts (implement feature)
+    - src/api/handlers.ts (update to use new logic)
+    - src/frontend/components.tsx (integrate with new types)
   - Dependencies: A.1 (database must exist)
   - Can run parallel with: B.2, B.3
   
-- [ ] **Task B.2**: [API integration]
+- [ ] **Task B.2**: [Complete API integration]
+  - Must include ALL:
+    - Type definitions
+    - Client updates in all consuming directories
+    - Error handling
+    - Tests
   - Dependencies: A.2 (endpoints must exist)
   - Can run parallel with: B.1, B.3
   
-- [ ] **Task B.3**: [UI components]
+- [ ] **Task B.3**: [UI components with full integration]
+  - Complete implementation including:
+    - Component code
+    - State management updates
+    - Type imports from shared definitions
+    - Event handlers connecting to API
   - Dependencies: A.3 (component structure)
   - Can run parallel with: B.1, B.2
 
@@ -140,6 +159,22 @@ Create detailed, actionable tasks organized by parallel execution groups:
 - **Minimize sequential chains** - only enforce ordering when absolutely necessary
 - Include code examples for complex implementations
 - Each task should be self-contained with clear inputs/outputs
+- **CRITICAL: Group cross-directory changes** - If implementing a type that's used in multiple places, include ALL consumers in the same task
+- **NO PLACEHOLDERS** - Every task must describe complete, production-ready implementations
+- **Example of GOOD task grouping**:
+  ```
+  Task: Implement User Authentication System
+  - Create auth types in shared/types/auth.ts
+  - Implement auth middleware in api/middleware/auth.ts
+  - Update API routes in api/routes/*.ts to use auth
+  - Add auth context in frontend/contexts/AuthContext.tsx
+  - Update all frontend components that need auth
+  ```
+- **Example of BAD task grouping**:
+  ```
+  Task 1: Create auth types
+  Task 2: Update consumers to use auth types (TODO later)
+  ```
 
 ### STEP 5: Validate & Optimize for Parallelization
 Before finalizing:
@@ -176,6 +211,25 @@ Before finalizing:
 5. **Consider Scale**: Address performance, security, and maintainability
 6. **Maximize Parallel Execution**: Structure the plan to maximize concurrent execution
 7. **Clear Dependencies**: Only enforce sequential ordering when absolutely necessary
+8. **Complete Implementations**: Every task must result in fully working code with all integrations
+
+## FORBIDDEN PATTERNS
+
+**NEVER include these in implementation plans:**
+1. `// TODO: implement this later`
+2. `// In a real implementation, we would...`
+3. `// This is a placeholder for...`
+4. `// Would need to update consumers in other directories`
+5. Any form of stub, mock, or incomplete implementation (unless explicitly for testing)
+
+**NEVER structure tasks like this:**
+- ❌ "Create types in types/ directory"
+- ❌ "Later, update components to use new types"
+- ❌ "In a follow-up task, integrate with API"
+
+**ALWAYS structure tasks like this:**
+- ✅ "Implement feature X including types, API integration, and all component updates"
+- ✅ "Create authentication system with middleware, types, API routes, and frontend integration"
 
 ### Parallelization Examples
 - **Good**: "Tasks A.1, A.2, and A.3 can all run in parallel as they touch different parts of the codebase"
@@ -195,5 +249,8 @@ Remember: The executive summary is for humans to understand what is changing. Th
 - Include ASCII diagrams only when they clarify architecture or data flow
 - Keep all explanations concise and actionable
 - Maximize parallelization opportunities
+- **GROUP CROSS-DIRECTORY CHANGES**: Never create tasks that leave incomplete implementations requiring follow-up work in sibling directories
+- **NO PLACEHOLDERS OR TODOS**: Every task must describe complete, production-ready implementations
+- **FORBIDDEN PHRASES**: Never use "TODO", "in a real implementation", "would need to update", or similar deferrals
 
 **IMPORTANT**: This document provides guidelines for creating implementation plans. DO NOT start creating a plan yet. Wait for the user's specific instructions about what implementation plan to create.
