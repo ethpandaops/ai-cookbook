@@ -4,7 +4,7 @@
 This command facilitates a systematic review of an existing implementation plan. It analyzes the plan file and guides through each proposed change one by one, allowing for feedback before any updates are made.
 
 ## Purpose
-- Analyze an existing implementation plan created by `create-implementation-plan-v2`
+- Analyze an existing implementation plan
 - Review each proposed change individually
 - Collect feedback on each change
 - Only update the plan when explicitly instructed
@@ -114,10 +114,10 @@ Claude: Noted. I'll include the index recommendation when we update the plan.
 - User maintains complete control over the review pace
 - All feedback is collected before any plan modifications
 
-## Integration with create-implementation-plan-v2
+## Integration with Implementation Planning
 
-This command is designed to work seamlessly after running `create-implementation-plan-v2`:
-1. Generate plan with `create-implementation-plan-v2`
+This command is designed to work seamlessly with any implementation plan:
+1. Generate or obtain an implementation plan
 2. Review plan with `review-implementation-plan`
 3. Update plan based on feedback (only when requested)
 4. Proceed with implementation using the refined plan

@@ -101,6 +101,12 @@ Creates a temporary feedback loop script that iterates with Claude until a succe
 ### `create-presentation`
 Creates succinct and effective presentations in Marp format with automatic HTML generation. Use this when you need to generate professional presentations from complex topics with clear, space-efficient slides.
 
+### `prepare-one-shot`
+Enables one-shot implementation mode for automated end-to-end feature development with issue creation, parallel implementation, and PR creation. Use this when you want Claude to autonomously implement a complete feature from planning through CI monitoring without manual intervention.
+
+### `review-implementation-plan`
+Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usally run after `create-implementation-plan-v2` has generated the plan.
+
 ### Adding New Commands
 
 To add new commands:
