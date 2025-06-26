@@ -1,25 +1,122 @@
-# Golang Standards
+# Golang Package Standards
 
-## Package Structure
+## Domain-Driven Structure
 
-### Domain-Driven Package Structure
-
-Each package should be organized around a business domain or capability, with types and their implementations co-located:
-
-```
-domain/
-├── domain.go      # Main domain logic and client implementation
-├── config.go      # Domain-specific configuration
-└── types.go       # Domain-specific types (if file gets too large)
+Each package represents a cohesive business capability. Related types and implementations should be co-located when they:
+- Share the same lifecycle
+- Change for the same reasons
+- Are always used together
 
 ```
-### Claude MUST NOT create Grab-Bag Packages:
-- `types/` - Types belong with their domain logic
-- `utils/` - Utility functions should live in their relevant domains
-- `common/` - Shared code should be in properly named domain packages
-- `models/` - Domain models belong in their respective domains
-- `helpers/` - Helper functions should be part of their domain
+user/
+├── user.go      # Domain logic + client implementation
+├── config.go    # Domain-specific configuration
+└── user_test.go # Domain tests
 
-### Claude MUST NOT create "Grab-Bag" files:
-- `helpers.go` - Helper functions should be part of their domain
-- `utils.go` - Utility functions should live in their relevant domains
+order/
+├── order.go     # Order service and core types
+├── item.go      # OrderItem logic (tightly coupled)
+├── status.go    # OrderStatus state machine (tightly coupled)
+└── order_test.go
+```
+
+## Layered Package Architecture
+
+### When to Use Layers
+
+Create sub-packages when components:
+- Have different reasons to change
+- Could be used independently  
+- Need separate testing boundaries
+
+Otherwise, use files within a single package.
+
+### Dependency Rules
+
+```
+node/
+├── node.go      # Orchestrates child packages
+├── p2p/         # Child package (if needed)
+└── api/         # Child package (if needed)
+```
+
+If siblings need to communicate, the parent must orchestrate this.
+
+### Example: When to Split vs. Keep Together
+
+```go
+// Split: Independent components
+node/
+├── p2p/         # Could be its own library
+└── api/         # Could serve different p2p impls
+
+// Together: Tightly coupled logic  
+p2p/
+├── p2p.go       # Main logic
+├── reqresp.go   # Just another file
+└── pubsub.go    # Just another file
+```
+
+**Key: Start with clear interfaces and boundaries. Refactor based on actual needs, not speculation.**
+
+## Required Interface Pattern
+
+Each package represents a cohesive business capability. Related types and implementations should be co-located when they:
+- Share the same lifecycle
+- Change for the same reasons
+- Are always used together
+
+```
+user/
+├── user.go      # Domain logic + client implementation
+├── config.go    # Domain-specific configuration
+└── user_test.go # Domain tests
+
+order/
+├── order.go     # Order service and core types
+├── item.go      # OrderItem logic (tightly coupled)
+├── status.go    # OrderStatus state machine (tightly coupled)
+└── order_test.go
+```
+
+## Required Interface Pattern
+
+Every domain package MUST:
+
+1. Define a public interface (e.g., `UserService`)
+2. Provide `NewUserService()` constructor that:
+   - Returns the interface, not the struct
+   - Does minimal initialization only
+3. Implement lifecycle methods:
+   - `Start(ctx context.Context) error` - Heavy initialization here
+   - `Stop() error` - Cleanup
+
+## Naming Rules
+
+- NO package stuttering: `user.User` not `user.UserUser`
+- NO generic packages: `types/`, `utils/`, `common/`, `models/`, `helpers/`
+- NO generic files: `helpers.go`, `utils.go`, `types.go`
+
+## Example
+
+```go
+// user/user.go
+package user
+
+type Service interface {
+    Start(ctx context.Context) error
+    Stop() error
+    GetUser(id string) (*User, error)
+}
+
+type User struct {
+    ID   string
+    Name string
+}
+
+func NewService(cfg Config) Service {
+    return &service{cfg: cfg}
+}
+```
+
+**Key: Package by cohesion - types, functions, and helpers that change together belong together.**
