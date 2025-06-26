@@ -126,13 +126,249 @@ You must:
 - Avoid storing context in structs
 - Implement context cancellation handling for long operations
 
+## Concurrency Guidelines
+
+### Core Principles
+
+- **Concurrency is not parallelism**: Design for concurrent execution, let the runtime handle parallelism
+- **Share memory by communicating**: Prefer channels over shared memory with mutexes
+- **Don't communicate by sharing memory**: Avoid complex mutex-based designs when channels are clearer
+
+### Goroutine Management
+
+#### Lifecycle Control
+```go
+// Always know when and how goroutines terminate
+type Worker struct {
+    done chan struct{}
+    wg   sync.WaitGroup
+}
+
+func (w *Worker) Start(ctx context.Context) error {
+    w.wg.Add(1)
+    go func() {
+        defer w.wg.Done()
+        for {
+            select {
+            case <-ctx.Done():
+                return
+            case <-w.done:
+                return
+            default:
+                // Do work
+            }
+        }
+    }()
+    return nil
+}
+
+func (w *Worker) Stop() error {
+    close(w.done)
+    w.wg.Wait()
+    return nil
+}
+```
+
+#### Goroutine Leaks Prevention
+- **Never start a goroutine without knowing how it will stop**
+- **Always provide a way to signal goroutine termination**
+- **Use context or done channels for cancellation**
+- **Wait for goroutines to complete before returning**
+
+### Channel Patterns
+
+#### Channel Design Rules
+- **Ownership**: The goroutine that creates a channel should close it
+- **Direction**: Use directional channels in function signatures
+- **Nil channels**: Leverage nil channel behavior in select statements
+- **Buffering**: Only buffer when you have a measurable performance need
+
+#### Common Patterns
+
+```go
+// Fan-out pattern
+func fanOut(ctx context.Context, in <-chan int, workers int) []<-chan int {
+    outs := make([]<-chan int, workers)
+    for i := 0; i < workers; i++ {
+        out := make(chan int)
+        outs[i] = out
+        go func() {
+            defer close(out)
+            for val := range in {
+                select {
+                case out <- val * 2:
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }()
+    }
+    return outs
+}
+
+// Timeout pattern
+func doWithTimeout(ctx context.Context, timeout time.Duration) error {
+    ctx, cancel := context.WithTimeout(ctx, timeout)
+    defer cancel()
+
+    done := make(chan struct{})
+    go func() {
+        defer close(done)
+        // Do work
+    }()
+
+    select {
+    case <-done:
+        return nil
+    case <-ctx.Done():
+        return ctx.Err()
+    }
+}
+```
+
+### Synchronization Primitives
+
+#### When to Use What
+- **Channels**: For passing ownership, signaling, or when the communication itself is important
+- **Mutexes**: For protecting shared state when channels would add unnecessary complexity
+- **Atomic operations**: For simple counters and flags
+- **sync.Once**: For one-time initialization
+- **WaitGroups**: For waiting on a collection of goroutines
+
+#### Mutex Guidelines
+```go
+// Always defer unlock immediately after lock
+type Cache struct {
+    mu    sync.RWMutex
+    items map[string]any
+}
+
+func (c *Cache) Get(key string) (any, bool) {
+    c.mu.RLock()
+    defer c.mu.RUnlock()
+    val, ok := c.items[key]
+    return val, ok
+}
+
+func (c *Cache) Set(key string, val any) {
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    c.items[key] = val
+}
+```
+
+### Error Handling in Concurrent Code
+
+```go
+// Use errgroup for concurrent operations that can fail
+func processItems(ctx context.Context, items []string) error {
+    g, ctx := errgroup.WithContext(ctx)
+
+    // Limit concurrency
+    sem := make(chan struct{}, 10)
+
+    for _, item := range items {
+        item := item // Capture loop variable
+        g.Go(func() error {
+            select {
+            case sem <- struct{}{}:
+                defer func() { <-sem }()
+            case <-ctx.Done():
+                return ctx.Err()
+            }
+            return processItem(ctx, item)
+        })
+    }
+
+    return g.Wait()
+}
+```
+
+### Race Condition Prevention
+
+- **Always run tests with `-race` flag**
+- **Never access shared memory without synchronization**
+- **Use `go vet` to catch common concurrency mistakes**
+- **Design APIs that make races impossible**
+
+```go
+// Bad: Racy counter
+type Counter struct {
+    value int
+}
+func (c *Counter) Inc() { c.value++ } // RACE!
+
+// Good: Safe counter
+type Counter struct {
+    value atomic.Int64
+}
+func (c *Counter) Inc() { c.value.Add(1) }
+```
+
+### Performance Considerations
+
+- **Don't create goroutines for very small tasks**: The overhead may exceed the benefit
+- **Limit concurrency**: Use worker pools or semaphores to prevent resource exhaustion
+- **Batch work**: Process items in batches rather than one at a time
+- **Profile before optimizing**: Use pprof to identify actual bottlenecks
+
+```go
+// Worker pool pattern
+func workerPool(ctx context.Context, jobs <-chan Job, workers int) {
+    var wg sync.WaitGroup
+
+    for i := 0; i < workers; i++ {
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            for {
+                select {
+                case job, ok := <-jobs:
+                    if !ok {
+                        return
+                    }
+                    processJob(ctx, job)
+                case <-ctx.Done():
+                    return
+                }
+            }
+        }()
+    }
+
+    wg.Wait()
+}
+```
+
+### Testing Concurrent Code
+
+- **Test with multiple GOMAXPROCS values**: `go test -cpu=1,2,4,8`
+- **Must use race detector**: `go test -race`
+- **Test cancellation paths**: Ensure goroutines stop when expected
+- **Test timeout scenarios**: Verify behavior under time pressure
+- **Use sync.WaitGroup in tests**: Ensure all goroutines complete
+
+```go
+func TestConcurrentOperation(t *testing.T) {
+    // Test with different levels of concurrency
+    for _, workers := range []int{1, 2, 10, 100} {
+        t.Run(fmt.Sprintf("workers-%d", workers), func(t *testing.T) {
+            ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+            defer cancel()
+
+            // Run test with race detector enabled
+            result := runConcurrentOperation(ctx, workers)
+            require.NoError(t, result)
+        })
+    }
+}
+```
+
 ## Testing Standards
 
 - Utilise table-driven tests for multiple scenarios.
 - Use `testify/assert` or `testify/require` for assertions.
 - Mock interfaces, not implementations.
 - Aim for 70% test coverage of critical code-paths.
-- You MUST always include the `-race` flag when executing `go test`.
 
 ## Naming Rules
 
