@@ -1,5 +1,16 @@
 # Golang Package Standards
 
+## Library Packages
+
+Unless otherwise specified, you MUST use the following packages:
+
+- Logging: `github.com/sirupsen/logrus`
+    - Configure once at the entry point of the application. Pass down the logger to each package via the constructor.
+    - Each package must have a `logrus.FieldLogger` instance passed in via the constructor. The package should add its own fields to its log instance. E.g. `log.WithField("package", "user")`
+    - Use `log.WithField("field", "value")` to add fields to the log instance.
+    - Use `log.WithFields(logrus.Fields{"key": "value", "key2": "value2"})` to add multiple fields to the log instance.
+- CLI: `github.com/spf13/cobra`
+
 ## Domain-Driven Structure
 
 Each package represents a cohesive business capability. Related types and implementations should be co-located when they:
