@@ -37,16 +37,34 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 
 ```
 ├── claude-code/
-│   └── commands/          # Claude Code commands for the team
+│   ├── commands/          # Claude Code commands for the team
+│   └── code-standards/    # Team coding standards for Claude
 ├── docs/                  # Team documentation
 ├── scripts/               # Shared scripts
-├── setup.sh               # Installation script
+├── setup.sh               # Installation script for commands
+├── install-code-standards.sh  # Installation script for coding standards
 └── README.md              # This file
 ```
 
 ## 🎮 Usage
 
 After running `setup.sh`, the commands will be available in Claude Code. You can use them by referencing the command name in your Claude Code sessions.
+
+### 📋 EthPandaOps Coding Standards
+
+Install team coding standards that Claude will automatically apply:
+
+```bash
+./install-code-standards.sh
+```
+
+This adds instructions to `~/.claude/CLAUDE.md` telling Claude to fetch the latest coding standards from GitHub when working with supported languages.
+
+**Commands:**
+
+- `./install-code-standards.sh` - Install/update standards (default)
+- `./install-code-standards.sh --status` - Check current status
+- `./install-code-standards.sh --uninstall` - Remove standards
 
 ### 📚 Initialize AI Documentation in Any Repository
 
