@@ -1,5 +1,9 @@
 # Golang Package Standards
 
+## Dependencies
+- Minimum Go version: 1.23.0
+- External dependencies managed through go modules
+
 ## Library Packages
 
 Unless otherwise specified, you MUST use the following packages:
@@ -120,6 +124,7 @@ You must:
 - All methods that do I/O or can block MUST accept `context.Context` as first parameter
 - Context should flow through the entire call stack
 - Avoid storing context in structs
+- Implement context cancellation handling for long operations
 
 ## Testing Standards
 
@@ -164,12 +169,17 @@ func NewService(cfg Config) Service {
 - Wrap errors with context using `fmt.Errorf` with `%w` verb
 - Create custom error types when needed for error handling logic
 - Log errors at appropriate levels (debug, info, warn, error)
+- Return errors with proper context information (line, position)
+- Use `errors.Is()` and `errors.As()` for error checking
 
 ## Style
 
 - Avoid overly long lines; aim for a soft line length limit of 99 characters.
 - Always group similar dependencies/imports, ensuring they are ordered by standard library, followed by everything else.
 - Follow standard Go conventions
+- Add proper docstring comments for exported functions and types
+- Replace `interface{}` with `any` type alias
+- Replace type assertions with type switches where appropriate to avoid panics. Throw errors instead.
 
 ## Linting
 
