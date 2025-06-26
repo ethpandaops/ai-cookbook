@@ -238,11 +238,8 @@ Before finalizing:
 
 Remember: The executive summary is for humans to understand what is changing. The implementation tasks are for Claude to execute with MAXIMUM PARALLELIZATION. Both should be concise and focused.
 
----
+**CRITICAL REMINDER FOR CLAUDE**:
 
----
-
-**CRITICAL REMINDER FOR CLAUDE**: 
 - This command is for PLANNING ONLY - never implement during plan creation
 - Research first, then plan
 - Focus on what changes and why specific changes are needed
@@ -252,5 +249,56 @@ Remember: The executive summary is for humans to understand what is changing. Th
 - **GROUP CROSS-DIRECTORY CHANGES**: Never create tasks that leave incomplete implementations requiring follow-up work in sibling directories
 - **NO PLACEHOLDERS OR TODOS**: Every task must describe complete, production-ready implementations
 - **FORBIDDEN PHRASES**: Never use "TODO", "in a real implementation", "would need to update", or similar deferrals
+- **INCLUDE IMPLEMENTATION INSTRUCTIONS**: Every plan file MUST include the "Implementation Workflow" section (see below) so Claude knows how to use the plan in a clean context
+
+## Implementation Workflow Section (INCLUDE IN EVERY PLAN FILE)
+
+**CRITICAL**: When creating a plan file, Claude MUST include this exact section at the end of every generated plan file:
+
+```markdown
+---
+
+## Implementation Workflow
+
+This plan file serves as the authoritative checklist for implementation. When implementing:
+
+### Required Process
+1. **Load Plan**: Read this entire plan file before starting
+2. **Sync Tasks**: Create TodoWrite tasks matching the checkboxes below
+3. **Execute & Update**: For each task:
+   - Mark TodoWrite as `in_progress` when starting
+   - Update checkbox `[ ]` to `[x]` when completing
+   - Mark TodoWrite as `completed` when done
+4. **Maintain Sync**: Keep this file and TodoWrite synchronized throughout
+
+### Critical Rules
+- This plan file is the source of truth for progress
+- Update checkboxes in real-time as work progresses
+- Never lose synchronization between plan file and TodoWrite
+- Mark tasks complete only when fully implemented (no placeholders)
+
+### Progress Tracking
+The checkboxes below represent the authoritative status of each task. Keep them updated as you work.
+```
+
+## Using the Plan During Implementation (Documentation)
+
+The above section gets embedded in every plan file. This section provides additional context for understanding the workflow:
+
+### Key Benefits
+
+- **Clean Context Support**: Implementation instructions are embedded in plan files, allowing Claude to work effectively even with a clean context
+- **Progress Persistence**: Plan file checkboxes serve as persistent progress tracking across sessions
+- **Single Source of Truth**: Reduces confusion by making the plan file the authoritative progress database
+
+### Typical User Workflow
+
+```markdown
+User: "Create implementation plan for feature X"
+→ Claude creates ./ai_plans/feature-x.md with embedded workflow instructions
+
+User: (later, possibly clean context) "Implement the plan in ./ai_plans/feature-x.md"  
+→ Claude reads plan file, sees workflow instructions, implements accordingly
+```
 
 **IMPORTANT**: This document provides guidelines for creating implementation plans. DO NOT start creating a plan yet. Wait for the user's specific instructions about what implementation plan to create.
