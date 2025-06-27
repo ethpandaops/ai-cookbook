@@ -87,25 +87,57 @@ generate_ethpandaops_section() {
 <!-- ETHPANDAOPS_STANDARDS_START -->
 # ethpandaops
 
-When making changes to supported file types, you MUST use WebFetch to download the latest coding standards from GitHub and apply them:
+When making changes to supported file types, you MUST read the local coding standards from the ai-cookbook repository and apply them:
 EOF
     
     # Add each enabled language
     jq -r '.languages | to_entries[] | select(.value.enabled == true) | @base64' "$CONFIG_FILE" | while read -r item; do
         decoded=$(echo "$item" | base64 --decode)
+        lang_key=$(echo "$decoded" | jq -r '.key')
         lang_name=$(echo "$decoded" | jq -r '.value.name')
         patterns=$(echo "$decoded" | jq -r '.value.patterns | join(", ")')
-        standards_url=$(echo "$decoded" | jq -r '.value.standards_url')
+        standards_path=$(echo "$decoded" | jq -r '.value.standards_path')
         
-        echo "- **${lang_name}** (${patterns}): ${standards_url}" >> "$temp_section"
+        echo "- **${lang_name}** (${patterns}): ~/.claude/ethpandaops/code-standards/${lang_key}/CLAUDE.md" >> "$temp_section"
     done
     
 
+    echo "Use the Read tool to load these standards from ~/.claude/ethpandaops/code-standards/." >> "$temp_section"
     echo "After loading the standards, you should briefly mention \"Loaded 🐼 ethPandaOps 🐼 code standards for [language]\"" >> "$temp_section"
     # End the section
     echo "<!-- ETHPANDAOPS_STANDARDS_END -->" >> "$temp_section"
     
     echo "$temp_section"
+}
+
+# Function to copy code standards to ~/.claude
+copy_code_standards() {
+    local standards_dir="$HOME/.claude/ethpandaops/code-standards"
+    log "Copying code standards to $standards_dir..."
+    
+    # Create directory structure
+    mkdir -p "$standards_dir"
+    
+    # Copy each enabled language's CLAUDE.md file
+    jq -r '.languages | to_entries[] | select(.value.enabled == true) | @base64' "$CONFIG_FILE" | while read -r item; do
+        decoded=$(echo "$item" | base64 --decode)
+        lang_name=$(echo "$decoded" | jq -r '.key')
+        standards_path=$(echo "$decoded" | jq -r '.value.standards_path')
+        
+        # Create language directory
+        mkdir -p "$standards_dir/$lang_name"
+        
+        # Copy CLAUDE.md file
+        local source_file="$SCRIPT_DIR/$standards_path"
+        local dest_file="$standards_dir/$lang_name/CLAUDE.md"
+        
+        if [ -f "$source_file" ]; then
+            cp "$source_file" "$dest_file"
+            log "Copied $lang_name standards to $dest_file"
+        else
+            warn "Source file not found: $source_file"
+        fi
+    done
 }
 
 # Function to add ethpandaops section
@@ -135,6 +167,9 @@ add_ethpandaops_section() {
         temp_file=$(mktemp)
         touch "$temp_file"
     fi
+    
+    # Copy code standards to ~/.claude
+    copy_code_standards
     
     # Generate new section from config
     local section_file
@@ -180,13 +215,13 @@ add_ethpandaops_section() {
         # Process each language separately for better formatting
         while read -r item; do
             decoded=$(echo "$item" | base64 --decode)
+            lang_key=$(echo "$decoded" | jq -r '.key')
             lang_name=$(echo "$decoded" | jq -r '.value.name')
             patterns=$(echo "$decoded" | jq -r '.value.patterns | join(", ")')
-            standards_url=$(echo "$decoded" | jq -r '.value.standards_url')
             
             echo "📄 $lang_name"
             echo "├── Files: $patterns"
-            echo "└── URL: $standards_url"
+            echo "└── Path: ~/.claude/ethpandaops/code-standards/$lang_key/CLAUDE.md"
         done < <(jq -r '.languages | to_entries[] | select(.value.enabled == true) | @base64' "$CONFIG_FILE")
         
         echo ""
@@ -213,14 +248,14 @@ show_status() {
                 local lang_count=0
                 while read -r item; do
                     decoded=$(echo "$item" | base64 --decode)
+                    lang_key=$(echo "$decoded" | jq -r '.key')
                     lang_name=$(echo "$decoded" | jq -r '.value.name')
                     patterns=$(echo "$decoded" | jq -r '.value.patterns | join(", ")')
-                    standards_url=$(echo "$decoded" | jq -r '.value.standards_url')
                     
                     lang_count=$((lang_count + 1))
                     echo "📄 $lang_name"
                     echo "├── Files: $patterns"
-                    echo "└── URL: $standards_url"
+                    echo "└── Path: ~/.claude/ethpandaops/code-standards/$lang_key/CLAUDE.md"
                 done < <(jq -r '.languages | to_entries[] | select(.value.enabled == true) | @base64' "$CONFIG_FILE")
                 
                 echo ""
@@ -261,6 +296,12 @@ remove_section() {
     local temp_file
     temp_file=$(remove_ethpandaops_section "$CLAUDE_MD")
     mv "$temp_file" "$CLAUDE_MD"
+    
+    # Remove copied standards
+    if [ -d "$HOME/.claude/ethpandaops/code-standards" ]; then
+        log "Removing code standards from ~/.claude/ethpandaops/code-standards..."
+        rm -rf "$HOME/.claude/ethpandaops/code-standards"
+    fi
     
     success "Removed ethpandaops section from CLAUDE.md"
 }
