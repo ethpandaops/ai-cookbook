@@ -3,13 +3,13 @@
     "go": {
       "name": "Go",
       "patterns": ["*.go", "go.mod", "go.sum"],
-      "standards_url": "https://raw.githubusercontent.com/ethpandaops/ai-cookbook/master/claude-code/code-standards/go/CLAUDE.md",
+      "standards_path": "claude-code/code-standards/go/CLAUDE.md",
       "enabled": true
     },
     "python": {
       "name": "Python",
       "patterns": ["*.py"],
-      "standards_url": "https://raw.githubusercontent.com/ethpandaops/ai-cookbook/master/claude-code/code-standards/python/CLAUDE.md",
+      "standards_path": "claude-code/code-standards/python/CLAUDE.md",
       "enabled": true
     }
   }
