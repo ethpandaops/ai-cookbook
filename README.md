@@ -8,7 +8,6 @@ A centralized repository for AI documentation, commands, and tools used by the e
 
 This repository serves as a shared resource for the ethPandaOps team to store and maintain:
 - Claude Code commands and workflows
-- Documentation and guides
 - Shared scripts and utilities
 - Team conventions and best practices
 
@@ -58,7 +57,7 @@ Install team coding standards that Claude will automatically apply:
 ./install-code-standards.sh
 ```
 
-This adds instructions to `~/.claude/CLAUDE.md` telling Claude to fetch the latest coding standards from GitHub when working with supported languages.
+This adds instructions to `~/.claude/CLAUDE.md` telling Claude to load the latest coding standards from the local ai-cookbook repository when working with supported languages.
 
 **Commands:**
 
@@ -68,7 +67,10 @@ This adds instructions to `~/.claude/CLAUDE.md` telling Claude to fetch the late
 
 ### 📚 Initialize AI Documentation in Any Repository
 
+**WARNING**: With the release of Claude 4 you probably don't need this script. Claude is smart enough to understand the project structure and conventions without it.
+
 Use the `init-ai-docs.py` script to set up comprehensive AI documentation in any project:
+
 
 ```bash
 # Initialize docs in current directory
