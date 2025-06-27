@@ -11,7 +11,7 @@ Imagine for a second, if you will, that you're an anthropic LLM and you're strol
 - The CLAUDE.md file MUST be in the current working directory
 - The CLAUDE.md file MUST be named `CLAUDE.md`
 - The CLAUDE.md file MUST be a markdown file
-- The CLAUDE.md file MUST NOT be verbos
+- The CLAUDE.md file MUST NOT be verbose
 - The CLAUDE.md file MUST NOT show any code, diagrams, or other non-textual content
 - The CLAUDE.md file MUST NOT show implementation details unless determined to be necessary
 - The CLAUDE.md file MUST NOT show why the file exists, or what it's for. We already know what it's for.
@@ -20,7 +20,7 @@ Imagine for a second, if you will, that you're an anthropic LLM and you're strol
 
 ### STEP 1: Analyze the project
 
-Deeply analyze the project and it's codebase, go through the depths of hell and back to get the best possible understanding of the project.
+Deeply analyze the project and its codebase, go through the depths of hell and back to get the best possible understanding of the project.
 
 1. What is the project's purpose?
 2. What are some of the key technologies used in the project that are important to know about? Versions don't matter here, just the technologies and their purpose.
