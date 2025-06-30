@@ -10,6 +10,15 @@ This command prompts for a list of repositories and an action to perform, then e
 - Use absolute paths or ensure proper working directory context for each task
 - Claude MUST use parallel task execution when running multiple repository operations
 
+## Security Restriction - CRITICAL
+**Claude Code has a security restriction that prevents changing directories outside the original working directory.** This means:
+- ❌ DO NOT use `cd` commands to navigate into repositories
+- ✅ DO use absolute paths to access files: `$original_cwd/repo_name/file.txt`
+- ✅ DO use git's `-C` flag for git commands: `git -C repo_name status`
+- ✅ DO use tool flags that accept paths: `find repo_name -name "*.go"`
+
+This restriction ensures that parallel subtasks maintain proper security boundaries while still being able to analyze repository contents.
+
 ## Tasks
 
 ### TASK 1: Prompt for Repository List
@@ -73,33 +82,41 @@ Validate the provided inputs:
 ### TASK 4: Download/Clone Repositories (Parallel)
 Create parallel subtasks to ensure all repositories are available locally:
 
+**IMPORTANT**: All operations should maintain the original working directory context. Store the original CWD at the start and ensure all file paths are relative to it.
+
 #### Parallel Repository Download Logic
 For each repository in the list, create an independent parallel subtask:
 
 #### Repository Download Subtask Structure
 Each repository gets its own download subtask with:
 
-1. **Determine Repository Type**:
+1. **Store Original Working Directory**:
+   - Capture the current working directory: `original_cwd=$(pwd)`
+   - All file outputs should be relative to this directory
+   - **IMPORTANT**: Do NOT use `cd` to change directories - use absolute paths instead
+
+2. **Determine Repository Type**:
    - **URL format** (https://github.com/org/repo): Extract repo name from URL
    - **URL with branch** (https://github.com/org/repo@branch): Extract repo name and branch
    - **GitHub format** (org/repo): Convert to full GitHub URL
    - **GitHub with branch** (org/repo@branch): Convert to full GitHub URL and extract branch
    - **Local path** (/path/to/repo): Verify path exists and is accessible
 
-2. **Generate Local Directory Name**:
+3. **Generate Local Directory Name**:
    - For URLs/GitHub repos: Use the repository name (e.g., "go-ethereum" from "ethereum/go-ethereum")
    - For local paths: Use the repository as-is (already local)
+   - Create full path: `repo_path="$original_cwd/$repo_name"`
 
-3. **Check if Directory Exists**:
+4. **Check if Directory Exists**:
    - If directory already exists in current working directory, skip cloning
    - Print message: "Repository {repo_name} already exists locally, skipping download"
 
-4. **Clone Repository** (if not exists):
+5. **Clone Repository** (if not exists):
    - Use shallow clone for performance: `git clone --depth 1 {repo_url} {local_directory_name}`
    - If a branch was specified, use: `git clone --depth 1 --branch {branch_name} {repo_url} {local_directory_name}`
-   - For actions requiring full history, add `--unshallow` flag after clone if needed
+   - For actions requiring full history, use git commands with `-C` flag: `git -C {local_directory_name} fetch --unshallow`
    - Handle clone failures and branch checkout failures gracefully with clear error messages
-   - Verify successful clone and branch checkout using git commands
+   - Verify successful clone and branch checkout using: `git -C {local_directory_name} branch --show-current`
 
 #### Parallel Execution Guidelines for Downloads
 - Use Claude's parallel task execution capabilities for repository downloads
@@ -125,6 +142,9 @@ Each repository gets its own download subtask with:
 
 #### Example Download Process (Per Subtask)
 ```bash
+# Store original working directory
+original_cwd=$(pwd)
+
 # For repository "ethereum/go-ethereum" (in parallel subtask)
 if [ ! -d "go-ethereum" ]; then
     git clone --depth 1 https://github.com/ethereum/go-ethereum.git go-ethereum
@@ -139,12 +159,12 @@ if [ ! -d "go-ethereum" ]; then
     echo "✓ Cloned go-ethereum and checked out develop branch (shallow)"
 else
     echo "→ go-ethereum already exists, skipping download"
-    # Verify current branch if needed
-    cd go-ethereum && git branch --show-current && cd ..
+    # Verify current branch if needed (using -C flag to avoid cd)
+    git -C go-ethereum branch --show-current
 fi
 
 # If full history is needed for the action, unshallow after clone:
-# cd go-ethereum && git fetch --unshallow && cd ..
+# git -C go-ethereum fetch --unshallow
 ```
 
 #### Error Handling for Downloads
@@ -159,11 +179,21 @@ After all repositories are downloaded, create and execute parallel subtasks for 
 
 #### Subtask Structure
 Each repository gets its own independent subtask with:
-1. **Repository Access**: Navigate to the local repository directory
-2. **Context Analysis**: Understand the repository structure and relevant files
-3. **Action Execution**: Perform the specified action
-4. **Output Generation**: Create any requested output files or reports
-5. **Cleanup**: Handle any temporary files or state
+1. **Working Directory Context**: 
+   - Store the original working directory: `original_cwd=$(pwd)`
+   - All output files should be written to the ORIGINAL working directory, not the repository subdirectory
+   - **CRITICAL**: Avoid using `cd` commands - use absolute paths or tool-specific flags instead
+2. **Repository Access**: Use absolute paths to access repository files
+   - Use: `$original_cwd/{repo_name}/path/to/file` for file access
+   - Use: `git -C {repo_name}` for git commands
+   - Use: `find {repo_name} -name pattern` for searching
+3. **Context Analysis**: Understand the repository structure and relevant files using absolute paths
+4. **Action Execution**: Perform the specified action using absolute paths to repository files
+5. **Output Generation**: 
+   - Create any requested output files or reports
+   - **IMPORTANT**: Write markdown files to the ORIGINAL working directory
+   - Example: Write to `$original_cwd/architecture-overview.md`
+6. **Cleanup**: Handle any temporary files or state
 
 #### Parallel Execution Guidelines
 - Use Claude's parallel task execution capabilities
@@ -178,11 +208,44 @@ Each repository gets its own independent subtask with:
 ```markdown
 **Repository**: {repository_name}
 **Action**: {full_action_description}
+**Working Directory**: Store original CWD and ensure all outputs go there
 **Requirements**: 
-- Work within repository context
-- Generate output as specified
+- Store original working directory: original_cwd=$(pwd)
+- DO NOT use cd commands - use absolute paths instead:
+  - Access files: $original_cwd/{repository_name}/path/to/file
+  - Git commands: git -C {repository_name} [command]
+  - Find/grep: find {repository_name} -name "pattern"
+- Work within repository context using absolute paths
+- Generate output files in ORIGINAL working directory:
+  - Use: $original_cwd/{output_filename}
 - Handle errors gracefully
 - Provide summary of work completed
+```
+
+#### Example Action Execution (Per Subtask)
+```bash
+# Store original working directory
+original_cwd=$(pwd)
+
+# Set repository path
+repo_name="go-ethereum"
+repo_path="$original_cwd/$repo_name"
+
+# Perform analysis using absolute paths (NO cd commands)
+# List files in repository
+find "$repo_path" -name "*.go" -type f | head -20
+
+# Run git commands using -C flag
+git -C "$repo_path" log --oneline -n 5
+
+# Read files using absolute paths
+cat "$repo_path/README.md"
+
+# Write output to ORIGINAL working directory
+cat > "$original_cwd/go-ethereum-architecture.md" << 'EOF'
+# Go-Ethereum Architecture Overview
+...
+EOF
 ```
 
 ### TASK 6: Consolidate Results
@@ -226,18 +289,19 @@ Provide a final summary including:
    ```
 
 3. **Parallel Execution**:
-   - Task 1: Process go-ethereum repository
-   - Task 2: Process beacon-chain repository  
-   - Task 3: Process xatu repository
+   - Task 1: Process go-ethereum repository (output to ./go-ethereum-architecture.md)
+   - Task 2: Process beacon-chain repository (output to ./beacon-chain-architecture.md)
+   - Task 3: Process xatu repository (output to ./xatu-architecture.md)
 
 4. **Results**:
    ```
    Completed parallel repository analysis:
-   ✓ go-ethereum: architecture-overview.md created
-   ✓ beacon-chain: architecture-overview.md created  
-   ✓ xatu: architecture-overview.md created
+   ✓ go-ethereum: ./go-ethereum-architecture.md created
+   ✓ beacon-chain: ./beacon-chain-architecture.md created  
+   ✓ xatu: ./xatu-architecture.md created
    
    All 3 repositories processed successfully.
+   All markdown files created in current working directory.
    ```
 
 ## Best Practices
