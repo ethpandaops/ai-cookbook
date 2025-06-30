@@ -10,6 +10,15 @@ This command prompts for a list of repositories and an action to perform, then e
 - Use absolute paths or ensure proper working directory context for each task
 - Claude MUST use parallel task execution when running multiple repository operations
 
+## Security Restriction - CRITICAL
+**Claude Code has a security restriction that prevents changing directories outside the original working directory.** This means:
+- ❌ DO NOT use `cd` commands to navigate into repositories
+- ✅ DO use absolute paths to access files: `$original_cwd/repo_name/file.txt`
+- ✅ DO use git's `-C` flag for git commands: `git -C repo_name status`
+- ✅ DO use tool flags that accept paths: `find repo_name -name "*.go"`
+
+This restriction ensures that parallel subtasks maintain proper security boundaries while still being able to analyze repository contents.
+
 ## Tasks
 
 ### TASK 1: Prompt for Repository List
@@ -84,6 +93,7 @@ Each repository gets its own download subtask with:
 1. **Store Original Working Directory**:
    - Capture the current working directory: `original_cwd=$(pwd)`
    - All file outputs should be relative to this directory
+   - **IMPORTANT**: Do NOT use `cd` to change directories - use absolute paths instead
 
 2. **Determine Repository Type**:
    - **URL format** (https://github.com/org/repo): Extract repo name from URL
@@ -95,6 +105,7 @@ Each repository gets its own download subtask with:
 3. **Generate Local Directory Name**:
    - For URLs/GitHub repos: Use the repository name (e.g., "go-ethereum" from "ethereum/go-ethereum")
    - For local paths: Use the repository as-is (already local)
+   - Create full path: `repo_path="$original_cwd/$repo_name"`
 
 4. **Check if Directory Exists**:
    - If directory already exists in current working directory, skip cloning
@@ -103,9 +114,9 @@ Each repository gets its own download subtask with:
 5. **Clone Repository** (if not exists):
    - Use shallow clone for performance: `git clone --depth 1 {repo_url} {local_directory_name}`
    - If a branch was specified, use: `git clone --depth 1 --branch {branch_name} {repo_url} {local_directory_name}`
-   - For actions requiring full history, add `--unshallow` flag after clone if needed
+   - For actions requiring full history, use git commands with `-C` flag: `git -C {local_directory_name} fetch --unshallow`
    - Handle clone failures and branch checkout failures gracefully with clear error messages
-   - Verify successful clone and branch checkout using git commands
+   - Verify successful clone and branch checkout using: `git -C {local_directory_name} branch --show-current`
 
 #### Parallel Execution Guidelines for Downloads
 - Use Claude's parallel task execution capabilities for repository downloads
@@ -148,12 +159,12 @@ if [ ! -d "go-ethereum" ]; then
     echo "✓ Cloned go-ethereum and checked out develop branch (shallow)"
 else
     echo "→ go-ethereum already exists, skipping download"
-    # Verify current branch if needed
-    cd go-ethereum && git branch --show-current && cd "$original_cwd"
+    # Verify current branch if needed (using -C flag to avoid cd)
+    git -C go-ethereum branch --show-current
 fi
 
 # If full history is needed for the action, unshallow after clone:
-# cd go-ethereum && git fetch --unshallow && cd "$original_cwd"
+# git -C go-ethereum fetch --unshallow
 ```
 
 #### Error Handling for Downloads
@@ -171,14 +182,18 @@ Each repository gets its own independent subtask with:
 1. **Working Directory Context**: 
    - Store the original working directory: `original_cwd=$(pwd)`
    - All output files should be written to the ORIGINAL working directory, not the repository subdirectory
-2. **Repository Access**: Navigate to the local repository directory for analysis
-3. **Context Analysis**: Understand the repository structure and relevant files
-4. **Action Execution**: Perform the specified action within the repository
+   - **CRITICAL**: Avoid using `cd` commands - use absolute paths or tool-specific flags instead
+2. **Repository Access**: Use absolute paths to access repository files
+   - Use: `$original_cwd/{repo_name}/path/to/file` for file access
+   - Use: `git -C {repo_name}` for git commands
+   - Use: `find {repo_name} -name pattern` for searching
+3. **Context Analysis**: Understand the repository structure and relevant files using absolute paths
+4. **Action Execution**: Perform the specified action using absolute paths to repository files
 5. **Output Generation**: 
    - Create any requested output files or reports
-   - **IMPORTANT**: Write markdown files to the ORIGINAL working directory (one level up from the repository)
-   - Example: If working in `./go-ethereum/`, write output to `../architecture-overview.md` or use absolute path `$original_cwd/architecture-overview.md`
-6. **Cleanup**: Return to original directory and handle any temporary files or state
+   - **IMPORTANT**: Write markdown files to the ORIGINAL working directory
+   - Example: Write to `$original_cwd/architecture-overview.md`
+6. **Cleanup**: Handle any temporary files or state
 
 #### Parallel Execution Guidelines
 - Use Claude's parallel task execution capabilities
@@ -196,12 +211,13 @@ Each repository gets its own independent subtask with:
 **Working Directory**: Store original CWD and ensure all outputs go there
 **Requirements**: 
 - Store original working directory: original_cwd=$(pwd)
-- Navigate to repository for analysis: cd {repository_name}
-- Work within repository context for code analysis
+- DO NOT use cd commands - use absolute paths instead:
+  - Access files: $original_cwd/{repository_name}/path/to/file
+  - Git commands: git -C {repository_name} [command]
+  - Find/grep: find {repository_name} -name "pattern"
+- Work within repository context using absolute paths
 - Generate output files in ORIGINAL working directory:
   - Use: $original_cwd/{output_filename}
-  - Or: ../{output_filename} (when inside repository)
-- Return to original directory when complete: cd "$original_cwd"
 - Handle errors gracefully
 - Provide summary of work completed
 ```
@@ -211,20 +227,25 @@ Each repository gets its own independent subtask with:
 # Store original working directory
 original_cwd=$(pwd)
 
-# Navigate to repository
-cd go-ethereum
+# Set repository path
+repo_name="go-ethereum"
+repo_path="$original_cwd/$repo_name"
 
-# Perform analysis or action within repository
-# ... (analyze code, understand structure, etc.)
+# Perform analysis using absolute paths (NO cd commands)
+# List files in repository
+find "$repo_path" -name "*.go" -type f | head -20
 
-# Write output to ORIGINAL working directory (one level up)
+# Run git commands using -C flag
+git -C "$repo_path" log --oneline -n 5
+
+# Read files using absolute paths
+cat "$repo_path/README.md"
+
+# Write output to ORIGINAL working directory
 cat > "$original_cwd/go-ethereum-architecture.md" << 'EOF'
 # Go-Ethereum Architecture Overview
 ...
 EOF
-
-# Return to original directory
-cd "$original_cwd"
 ```
 
 ### TASK 6: Consolidate Results
