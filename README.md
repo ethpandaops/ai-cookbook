@@ -33,17 +33,11 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    ```
    Claude will automatically apply ethPandaOps coding standards when working with supported languages.
 
-4. (Optional) View available Claude Code hooks:
+4. (Optional) Install Claude Code hooks:
    ```bash
-   ./install-hooks.sh --list
+   install-hooks.py
    ```
-   Hooks are behind-the-scenes scripts that run before/after Claude Code operations. We have a few hooks, like `gofmt`, which automatically formats Go files after Claude Code touches them.
-
-5. (Optional) Install a Claude Code hook:
-   ```bash
-   ./install-hooks.sh
-   ```
-
+   Hooks are behind-the-scenes scripts that run before/after Claude Code operations. We have hooks like `gofmt` which automatically formats Go files after Claude Code touches them.
 
 5. To update everything, simply run:
    ```bash
@@ -54,15 +48,14 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 
 ```
 ├── claude-code/
-│   ├── commands/          # Claude Code commands for the team
-│   ├── code-standards/    # Team coding standards for Claude
-│   └── hooks/             # Claude Code hooks
-├── docs/                  # Team documentation
-├── scripts/               # Shared scripts
-├── setup.sh               # Installation script for commands
+│   ├── commands/              # Claude Code commands for the team
+│   ├── code-standards/        # Team coding standards for Claude
+│   └── hooks/                 # Claude Code hooks
+├── docs/                      # Team documentation
+├── scripts/                   # Shared scripts
+├── setup.sh                   # Installation script for commands
 ├── install-code-standards.sh  # Installation script for coding standards
-├── install-hooks.sh       # Installation script for Claude Code hooks
-└── README.md              # This file
+└── README.md                  # This file
 ```
 
 ## 🎮 Usage
@@ -87,29 +80,21 @@ This adds instructions to `~/.claude/CLAUDE.md` telling Claude to load the lates
 
 ### 🪝 Claude Code Hooks
 
-Install hooks that automatically run after Claude Code operations:
+Use the `install-hooks.py` script to manage hooks that automatically run after Claude Code operations:
 
 ```bash
-./install-hooks.sh
+# Interactive mode (default when no arguments)
+install-hooks.py
 ```
-
-This allows you to set up automatic formatting, linting, or other post-processing steps that run after Claude edits files.
 
 **Available Hooks:**
 
 - `gofmt` - Automatically formats Go files after editing
+- Additional hooks available in `claude-code/hooks/`
 
-**Commands:**
+Hooks are configured in `~/.claude/settings.json` (global) or `.claude/settings.json` (local).
 
-- `./install-hooks.sh` - Interactive installer
-- `./install-hooks.sh --all` - Install all available hooks
-- `./install-hooks.sh --install gofmt` - Install specific hook
-- `./install-hooks.sh --list` - List installed hooks
-- `./install-hooks.sh --uninstall gofmt` - Uninstall specific hook
-- `./install-hooks.sh --uninstall all` - Uninstall all hooks
-- `./install-hooks.sh --show gofmt` - Show hook details
-
-Hooks are installed to `~/.claude/hooks/ethpandaops/` and configured in `~/.claude/settings.json`.
+See [full documentation](docs/install-hooks.md) for detailed usage and options.
 
 ### 📚 Initialize AI Documentation in Any Repository
 
