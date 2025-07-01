@@ -2,10 +2,7 @@
 
 This directory contains hooks that can be installed to extend Claude Code's functionality.
 
-## Available Hooks
-
-### gofmt
-Automatically formats Go files with `gofmt` after editing.
+Read more: https://docs.anthropic.com/en/docs/claude-code/hooks
 
 ## Creating New Hooks
 
@@ -43,11 +40,4 @@ Hooks receive JSON input via stdin with this structure:
     // Tool response data
   }
 }
-```
-
-## Installation
-
-Use the install script from the root directory:
-```bash
-./install-hooks.sh --install gofmt
 ```
