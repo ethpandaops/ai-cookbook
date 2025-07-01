@@ -67,11 +67,8 @@ get_available_hooks() {
     local hooks=()
     if [ -d "$HOOKS_DIR" ]; then
         for hook_dir in "$HOOKS_DIR"/*; do
-            if [ -d "$hook_dir" ] && [ -f "$hook_dir/config.json" ]; then
-                # Check for either hook.py or hook.sh
-                if [ -f "$hook_dir/hook.py" ] || [ -f "$hook_dir/hook.sh" ]; then
-                    hooks+=("$(basename "$hook_dir")")
-                fi
+            if [ -d "$hook_dir" ] && [ -f "$hook_dir/config.json" ] && [ -f "$hook_dir/hook.sh" ]; then
+                hooks+=("$(basename "$hook_dir")")
             fi
         done
     fi
@@ -97,12 +94,10 @@ install_hook() {
     local hook_config="$hook_dir/config.json"
     local deps_script="$hook_dir/deps.sh"
     
-    # Find the hook script (either .py or .sh)
-    local hook_script=""
-    if [ -f "$hook_dir/hook.sh" ]; then
-        hook_script="$hook_dir/hook.sh"
-    else
-        error "Hook '$hook_name' not found or incomplete (hook.sh)"
+    # Check for hook script
+    local hook_script="$hook_dir/hook.sh"
+    if [ ! -f "$hook_script" ]; then
+        error "Hook '$hook_name' missing hook.sh"
         return 1
     fi
     
@@ -136,9 +131,7 @@ install_hook() {
     # Copy hook script to user's hooks directory
     mkdir -p "$USER_HOOKS_DIR"
     
-    # Preserve the original extension
-    local hook_ext="${hook_script##*.}"
-    local installed_hook_path="$USER_HOOKS_DIR/${hook_name}.${hook_ext}"
+    local installed_hook_path="$USER_HOOKS_DIR/${hook_name}.sh"
     cp "$hook_script" "$installed_hook_path"
     chmod +x "$installed_hook_path"
     
@@ -183,14 +176,7 @@ install_hook() {
 # Function to uninstall a hook
 uninstall_hook() {
     local hook_name="$1"
-    
-    # Find the installed hook (either .py or .sh)
-    local installed_hook_path=""
-    if [ -f "$USER_HOOKS_DIR/${hook_name}.py" ]; then
-        installed_hook_path="$USER_HOOKS_DIR/${hook_name}.py"
-    elif [ -f "$USER_HOOKS_DIR/${hook_name}.sh" ]; then
-        installed_hook_path="$USER_HOOKS_DIR/${hook_name}.sh"
-    fi
+    local installed_hook_path="$USER_HOOKS_DIR/${hook_name}.sh"
     
     if [ ! -f "$CLAUDE_CONFIG_FILE" ]; then
         warn "No settings.json found"
@@ -238,7 +224,7 @@ uninstall_all_hooks() {
     .hooks[0].command | 
     select(contains("/ethpandaops/")) |
     split("/")[-1] | 
-    sub("\\.(py|sh)$"; "")
+    sub("\\.sh$"; "")
     ' "$CLAUDE_CONFIG_FILE" 2>/dev/null | sort -u)
     
     if [ -z "$installed_hooks" ]; then
@@ -273,7 +259,7 @@ list_installed_hooks() {
     .value[] | 
     .hooks[0].command | 
     split("/")[-1] | 
-    sub("\\.(py|sh)$"; "")
+    sub("\\.sh$"; "")
     ' "$CLAUDE_CONFIG_FILE" 2>/dev/null | sort -u)
     
     if [ -z "$installed_hooks" ]; then
@@ -305,11 +291,7 @@ interactive_install() {
         echo "  $i) $hook"
         echo "     $desc"
         # Add clickable link to inspect hook
-        if [ -f "$hook_dir/hook.py" ]; then
-            echo "     Inspect: file://$hook_dir/hook.py (Cmd+click)"
-        elif [ -f "$hook_dir/hook.sh" ]; then
-            echo "     Inspect: file://$hook_dir/hook.sh (Cmd+click)"
-        fi
+        echo "     Inspect: file://$hook_dir/hook.sh (Cmd+click)"
         echo ""
         ((i++))
     done
@@ -344,11 +326,7 @@ interactive_install() {
                 echo "  $i) $hook"
                 echo "     $desc"
                 # Add clickable link to inspect hook
-                if [ -f "$hook_dir/hook.py" ]; then
-                    echo "     Inspect: file://$hook_dir/hook.py (Cmd+click)"
-                elif [ -f "$hook_dir/hook.sh" ]; then
-                    echo "     Inspect: file://$hook_dir/hook.sh (Cmd+click)"
-                fi
+                echo "     Inspect: file://$hook_dir/hook.sh (Cmd+click)"
                 echo ""
                 ((i++))
             done
@@ -405,13 +383,8 @@ show_hook_details() {
     echo "Matcher:     $matcher"
     
     # Show the actual script file with clickable link
-    if [ -f "$hook_dir/hook.py" ]; then
-        echo "Script:      file://$hook_dir/hook.py"
-        echo "             (Cmd+click to inspect)"
-    elif [ -f "$hook_dir/hook.sh" ]; then
-        echo "Script:      file://$hook_dir/hook.sh"
-        echo "             (Cmd+click to inspect)"
-    fi
+    echo "Script:      file://$hook_dir/hook.sh"
+    echo "             (Cmd+click to inspect)"
     
     # Check dependencies if deps.sh exists
     if [ -f "$hook_dir/deps.sh" ]; then

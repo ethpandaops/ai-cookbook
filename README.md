@@ -23,11 +23,23 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    ```bash
    ./setup.sh
    ```
+   This will:
+   - Copy all commands from `./claude-code/commands/*` to `~/.claude/commands/ethpandaops/`
+   - Add the `scripts/` directory to your PATH
 
-3. The setup script will do the following:
-    - Copy all the commands `./claude-code/commands/*` files to `~/.claude/commands/ethpandaops/`
-    - Add the `scripts/` directory to your PATH
-4. To update commands, simply run:
+3. (Optional) Install team coding standards for automatic code style enforcement:
+   ```bash
+   ./install-code-standards.sh
+   ```
+   Claude will automatically apply ethPandaOps coding standards when working with supported languages.
+
+4. (Optional) Install hooks for automated post-processing:
+   ```bash
+   ./install-hooks.sh
+   ```
+   Available hooks include `gofmt` for automatic Go formatting after edits.
+
+5. To update everything, simply run:
    ```bash
    git pull
    ```
