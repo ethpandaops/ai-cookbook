@@ -339,44 +339,59 @@ def get_installed_hooks(mode: str = InstallMode.GLOBAL) -> List[str]:
 
 def list_installed_hooks(mode: str = None):
     """List all installed hooks"""
+    available_hooks = get_available_hooks()
+    print()
+    print(f"{Colors.BOLD}{Colors.CYAN}Hooks{Colors.NC}")
+    print(f"{Colors.DIM}{'─' * 5}{Colors.NC}")
+    
+    if not available_hooks:
+        print(f"  {Colors.DIM}No hooks available{Colors.NC}")
+        return
+    
+    # Get installed hooks for both modes if mode not specified
     if mode is None:
-        # Show both global and local
-        print()
-        print(f"{Colors.BOLD}{Colors.CYAN}Global Hooks{Colors.NC}")
-        print(f"{Colors.DIM}{'─' * 12}{Colors.NC}")
         global_hooks = get_installed_hooks(InstallMode.GLOBAL)
-        if not global_hooks:
-            print(f"  {Colors.DIM}No hooks installed{Colors.NC}")
-        else:
-            for hook in global_hooks:
-                print(f"  {Colors.GREEN}✓{Colors.NC} {hook}")
-        
-        print()
-        print(f"{Colors.BOLD}{Colors.CYAN}Local Hooks{Colors.NC}")
-        print(f"{Colors.DIM}{'─' * 11}{Colors.NC}")
-        print(f"{Colors.DIM}Directory: {Path.cwd()}{Colors.NC}")
         local_hooks = get_installed_hooks(InstallMode.LOCAL)
-        if not local_hooks:
-            print(f"  {Colors.DIM}No hooks installed{Colors.NC}")
-        else:
-            for hook in local_hooks:
-                print(f"  {Colors.GREEN}✓{Colors.NC} {hook}")
     else:
-        installed_hooks = get_installed_hooks(mode)
-        mode_name = "Global" if mode == InstallMode.GLOBAL else "Local"
-        
-        print()
-        print(f"{Colors.BOLD}{Colors.CYAN}Installed Hooks ({mode_name}){Colors.NC}")
-        print(f"{Colors.DIM}{'─' * (16 + len(mode_name))}{Colors.NC}")
-        
-        if mode == InstallMode.LOCAL:
-            print(f"{Colors.DIM}Directory: {Path.cwd()}{Colors.NC}")
-        
-        if not installed_hooks:
-            print(f"  {Colors.DIM}No hooks installed{Colors.NC}")
+        # If mode specified, only check that mode
+        if mode == InstallMode.GLOBAL:
+            global_hooks = get_installed_hooks(InstallMode.GLOBAL)
+            local_hooks = []
         else:
-            for hook in installed_hooks:
-                print(f"  {Colors.GREEN}✓{Colors.NC} {hook}")
+            global_hooks = []
+            local_hooks = get_installed_hooks(InstallMode.LOCAL)
+    
+    # Display each hook with its status
+    for hook in available_hooks:
+        desc = get_hook_info(hook)
+        if len(desc) > 50:
+            desc = desc[:47] + "..."
+        
+        # Determine installation status
+        is_global = hook in global_hooks
+        is_local = hook in local_hooks
+        
+        if is_global and is_local:
+            # Installed in both
+            status = f"{Colors.GREEN}[global, local]{Colors.NC}"
+            hook_display = f"{Colors.GREEN}{hook}{Colors.NC}"
+        elif is_global:
+            # Only global
+            status = f"{Colors.GREEN}[global]{Colors.NC}"
+            hook_display = f"{Colors.GREEN}{hook}{Colors.NC}"
+        elif is_local:
+            # Only local
+            status = f"{Colors.GREEN}[local]{Colors.NC}"
+            hook_display = f"{Colors.GREEN}{hook}{Colors.NC}"
+        else:
+            # Not installed
+            status = f"{Colors.GRAY}[not installed]{Colors.NC}"
+            hook_display = f"{hook}"
+        
+        print(f"  {hook_display:<15} {status:<25} {Colors.DIM}{desc}{Colors.NC}")
+    
+    # Add blank line at the end
+    print()
 
 def show_hook_details(hook_name: str):
     """Show detailed information about a hook"""
@@ -439,6 +454,9 @@ def show_hook_details(hook_name: str):
         print(f"  {Colors.GREEN}✓{Colors.NC} Installed (local)")
     else:
         print(f"  {Colors.YELLOW}○{Colors.NC} Not installed")
+    
+    # Add blank line at the end
+    print()
 
 def getch(timeout=None):
     """Get a single character from stdin with optional timeout"""
@@ -531,7 +549,6 @@ def select_install_mode() -> str:
                     continue
             elif key == 'q' or key == '\x03':  # q or Ctrl+C
                 print(Colors.SHOW_CURSOR)
-                print("\nCancelled.")
                 sys.exit(0)
             elif key == 'UP' and selected > 0:
                 selected = 0
@@ -548,7 +565,6 @@ def select_install_mode() -> str:
                     
     except KeyboardInterrupt:
         print(Colors.SHOW_CURSOR)
-        print("\nCancelled.")
         sys.exit(0)
     except Exception:
         print(Colors.SHOW_CURSOR)
@@ -667,7 +683,6 @@ def interactive_install():
                     continue
             elif key == 'q' or key == '\x03':  # q or Ctrl+C
                 print(Colors.SHOW_CURSOR)
-                print("\nInstallation cancelled")
                 return
             elif key == 'UP' and selected > 0:
                 selected -= 1
@@ -803,8 +818,10 @@ Examples:
         if args.show not in available:
             error(f"Hook '{args.show}' not found")
             print(f"Available hooks: {', '.join(available)}")
+            print()
             sys.exit(1)
         show_hook_details(args.show)
+        print()
     elif args.uninstall:
         if args.uninstall == 'all':
             if mode is None:
@@ -813,15 +830,18 @@ Examples:
             installed = get_installed_hooks(mode)
             if not installed:
                 warn(f"No hooks installed in {mode} mode")
+                print()
                 sys.exit(0)
             for hook in installed:
                 uninstall_hook(hook, mode=mode)
+            print()
         else:
             # Validate hook exists
             available = get_available_hooks()
             if args.uninstall not in available:
                 error(f"Hook '{args.uninstall}' not found")
                 print(f"Available hooks: {', '.join(available)}")
+                print()
                 sys.exit(1)
             
             if mode is None:
@@ -833,6 +853,7 @@ Examples:
                     # Installed in both - need to ask
                     error(f"Hook '{args.uninstall}' is installed in both global and local modes")
                     print("Please specify mode with --global or --local")
+                    print()
                     sys.exit(1)
                 elif global_installed:
                     mode = InstallMode.GLOBAL
@@ -842,20 +863,24 @@ Examples:
                     info(f"Uninstalling '{args.uninstall}' from local mode")
                 else:
                     warn(f"Hook '{args.uninstall}' is not installed")
+                    print()
                     sys.exit(0)
             else:
                 # Mode specified - check if actually installed
                 if args.uninstall not in get_installed_hooks(mode):
                     warn(f"Hook '{args.uninstall}' is not installed in {mode} mode")
+                    print()
                     sys.exit(0)
             
             uninstall_hook(args.uninstall, mode=mode)
+            print()
     elif args.all:
         if mode is None:
             mode = select_install_mode()
         available_hooks = get_available_hooks()
         if not available_hooks:
             error("No hooks available to install")
+            print()
             sys.exit(1)
         already_installed = 0
         for hook in available_hooks:
@@ -865,12 +890,14 @@ Examples:
                 already_installed += 1
         if already_installed == len(available_hooks):
             info(f"All hooks already installed in {mode} mode")
+        print()
     elif args.install:
         # Validate hook exists
         available = get_available_hooks()
         if args.install not in available:
             error(f"Hook '{args.install}' not found")
             print(f"Available hooks: {', '.join(available)}")
+            print()
             sys.exit(1)
         
         if mode is None:
@@ -880,11 +907,13 @@ Examples:
             
             if global_installed and local_installed:
                 info(f"Hook '{args.install}' is already installed in both global and local modes")
+                print()
                 sys.exit(0)
             elif global_installed or local_installed:
                 where = "global" if global_installed else "local"
                 info(f"Hook '{args.install}' is already installed in {where} mode")
                 print("Use --global or --local to install in the other mode")
+                print()
                 sys.exit(0)
             else:
                 # Not installed anywhere - ask for mode
@@ -893,12 +922,15 @@ Examples:
             # Check if already installed in specified mode
             if args.install in get_installed_hooks(mode):
                 info(f"Hook '{args.install}' is already installed in {mode} mode")
+                print()
                 sys.exit(0)
         
         install_hook(args.install, mode=mode)
+        print()
     else:
         # This shouldn't happen with argparse, but just in case
         parser.print_help()
+        print()
         sys.exit(1)
 
 if __name__ == "__main__":
@@ -906,5 +938,4 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         print(Colors.SHOW_CURSOR)
-        print("\n\nInstallation cancelled.")
         sys.exit(0)
