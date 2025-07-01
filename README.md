@@ -85,6 +85,18 @@ Use the `install-hooks.py` script to manage hooks that automatically run after C
 ```bash
 # Interactive mode (default when no arguments)
 install-hooks.py
+
+# List available commands
+install-hooks.py --help
+
+# List all hooks
+install-hooks.py --list
+
+# Install all hooks globally
+install-hooks.py --all --global
+
+# Install gofmt hook to current directory
+install-hooks.py --install gofmt --local
 ```
 
 **Available Hooks:**
