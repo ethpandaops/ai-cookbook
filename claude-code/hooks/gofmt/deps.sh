@@ -15,8 +15,7 @@ echo ""
 
 # Check if jq is available (required for JSON parsing)
 if command -v jq &> /dev/null; then
-    echo -e "${GREEN}✓${NC} jq is installed"
-    echo "  $(jq --version)"
+    echo -e "${GREEN}✓${NC} jq"
 else
     echo -e "${RED}✗${NC} jq is not installed (required for JSON parsing)"
     echo ""
@@ -30,8 +29,7 @@ fi
 
 # Check if gofmt is available
 if command -v gofmt &> /dev/null; then
-    echo -e "${GREEN}✓${NC} gofmt is installed"
-    echo "  $(go version 2>&1 | head -1)"
+    echo -e "${GREEN}✓${NC} gofmt"
 else
     echo -e "${RED}✗${NC} gofmt is not installed"
     echo ""
