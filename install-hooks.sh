@@ -289,7 +289,8 @@ interactive_install() {
         local desc=$(get_hook_info "$hook")
         local hook_dir="$HOOKS_DIR/$hook"
         echo "  $i) $hook"
-        echo "     $desc"
+        echo ""
+        echo "     Description: $desc"
         # Add clickable link to inspect hook
         echo "     Inspect: file://$hook_dir/hook.sh (Cmd+click)"
         echo ""

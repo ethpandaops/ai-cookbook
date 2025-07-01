@@ -33,11 +33,17 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    ```
    Claude will automatically apply ethPandaOps coding standards when working with supported languages.
 
-4. (Optional) Install hooks for automated post-processing:
+4. (Optional) View available Claude Code hooks:
+   ```bash
+   ./install-hooks.sh --list
+   ```
+   Hooks are behind-the-scenes scripts that run before/after Claude Code operations. We have a few hooks, like `gofmt`, which automatically formats Go files after Claude Code touches them.
+
+5. (Optional) Install a Claude Code hook:
    ```bash
    ./install-hooks.sh
    ```
-   Available hooks include `gofmt` for automatic Go formatting after edits.
+
 
 5. To update everything, simply run:
    ```bash
