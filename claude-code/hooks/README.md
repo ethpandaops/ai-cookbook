@@ -10,6 +10,7 @@ To create a new hook, create a directory with:
 
 1. `hook.sh` or `hook.py` - The hook script that receives JSON input via stdin
 2. `config.json` - Hook metadata and configuration
+3. `deps.sh` (optional) - Dependency check script that exits 0 if all dependencies are met
 
 ### Example config.json:
 ```json

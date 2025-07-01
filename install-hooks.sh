@@ -95,6 +95,7 @@ install_hook() {
     local hook_name="$1"
     local hook_dir="$HOOKS_DIR/$hook_name"
     local hook_config="$hook_dir/config.json"
+    local deps_script="$hook_dir/deps.sh"
     
     # Find the hook script (either .py or .sh)
     local hook_script=""
@@ -108,6 +109,16 @@ install_hook() {
     if [ ! -f "$hook_config" ]; then
         error "Hook '$hook_name' missing config.json"
         return 1
+    fi
+    
+    # Check dependencies if deps.sh exists
+    if [ -f "$deps_script" ]; then
+        log "Checking dependencies for $hook_name..."
+        if ! bash "$deps_script"; then
+            error "Dependencies not met for $hook_name"
+            return 1
+        fi
+        echo ""
     fi
     
     # Create claude directory if it doesn't exist
@@ -400,6 +411,18 @@ show_hook_details() {
     elif [ -f "$hook_dir/hook.sh" ]; then
         echo "Script:      file://$hook_dir/hook.sh"
         echo "             (Cmd+click to inspect)"
+    fi
+    
+    # Check dependencies if deps.sh exists
+    if [ -f "$hook_dir/deps.sh" ]; then
+        echo ""
+        echo "Dependencies:"
+        if bash "$hook_dir/deps.sh" &>/dev/null; then
+            success "All dependencies met"
+        else
+            warn "Missing dependencies (run deps.sh for details)"
+            echo "Check deps: file://$hook_dir/deps.sh"
+        fi
     fi
     
     # Check if installed
