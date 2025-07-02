@@ -50,7 +50,7 @@ USER_HOOKS_DIR = CLAUDE_DIR / "hooks" / "ethpandaops"
 
 # Local configuration
 LOCAL_CLAUDE_DIR = Path.cwd() / ".claude"
-LOCAL_CONFIG_FILE = LOCAL_CLAUDE_DIR / "settings.json"
+LOCAL_CONFIG_FILE = LOCAL_CLAUDE_DIR / "settings.local.json"
 LOCAL_HOOKS_DIR = LOCAL_CLAUDE_DIR / "hooks" / "ethpandaops"
 
 # Installation mode
@@ -96,14 +96,37 @@ def info(message: str):
     """Log an info message with cyan prefix"""
     print(f"{Colors.CYAN}[INFO]{Colors.NC} {message}")
 
+def ensure_gitignore_entry(claude_dir: Path):
+    """Ensure .gitignore includes settings.local.json"""
+    gitignore_path = claude_dir / ".gitignore"
+    entry = "settings.local.json"
+    
+    # Read existing .gitignore if it exists
+    existing_lines = []
+    if gitignore_path.exists():
+        with open(gitignore_path, 'r') as f:
+            existing_lines = [line.strip() for line in f.readlines()]
+    
+    # Check if entry already exists
+    if entry not in existing_lines:
+        with open(gitignore_path, 'a') as f:
+            if existing_lines and not existing_lines[-1] == "":
+                f.write("\n")
+            f.write(f"{entry}\n")
+        info(f"Added {entry} to .claude/.gitignore")
+
 def backup_settings(mode: str = InstallMode.GLOBAL, quiet: bool = False):
-    """Backup settings.json file"""
+    """Backup settings file"""
     claude_dir, config_file, _ = get_paths(mode)
     if config_file.exists():
         backup_dir = claude_dir / "backups"
         backup_dir.mkdir(exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_file = backup_dir / f"settings.json.backup.{timestamp}"
+        # Use appropriate backup filename based on the original file
+        if mode == InstallMode.LOCAL:
+            backup_file = backup_dir / f"settings.local.json.backup.{timestamp}"
+        else:
+            backup_file = backup_dir / f"settings.json.backup.{timestamp}"
         shutil.copy2(config_file, backup_file)
         if not quiet:
             log(f"Created backup: {backup_file}")
@@ -189,12 +212,18 @@ def install_hook(hook_name: str, mode: str = InstallMode.GLOBAL, quiet: bool = F
     claude_dir.mkdir(exist_ok=True)
     hooks_dir.mkdir(parents=True, exist_ok=True)
     
-    # Initialize settings.json if needed
+    # Initialize settings file if needed
     if not config_file.exists():
         with open(config_file, 'w') as f:
             json.dump({"hooks": {}}, f, indent=2)
         if not quiet:
-            log(f"Created new settings.json in {mode} mode")
+            if mode == InstallMode.LOCAL:
+                log(f"Created new settings.local.json")
+                info(f"See: https://docs.anthropic.com/en/docs/claude-code/settings")
+                # Ensure .gitignore includes settings.local.json
+                ensure_gitignore_entry(claude_dir)
+            else:
+                log(f"Created new settings.json")
     
     # Backup current settings
     backup_settings(mode=mode, quiet=quiet)
@@ -228,11 +257,22 @@ def install_hook(hook_name: str, mode: str = InstallMode.GLOBAL, quiet: bool = F
     ]
     
     # Add new hook configuration
+    # Use relative path for local installations
+    if mode == InstallMode.LOCAL:
+        # Convert to relative path from current directory
+        try:
+            command_path = os.path.relpath(installed_hook_path, Path.cwd())
+        except ValueError:
+            # If paths are on different drives (Windows), use absolute path
+            command_path = str(installed_hook_path)
+    else:
+        command_path = str(installed_hook_path)
+    
     new_entry = {
         "matcher": matcher,
         "hooks": [{
             "type": "command",
-            "command": str(installed_hook_path)
+            "command": command_path
         }]
     }
     settings['hooks'][hook_type].append(new_entry)
@@ -243,7 +283,10 @@ def install_hook(hook_name: str, mode: str = InstallMode.GLOBAL, quiet: bool = F
     
     if not quiet:
         success(f"Installed hook: {hook_name} ({mode})")
-        info(f"Hook location: {installed_hook_path}")
+        if mode == InstallMode.LOCAL:
+            info(f"Hook command: {command_path}")
+        else:
+            info(f"Hook location: {installed_hook_path}")
     return True
 
 def uninstall_hook(hook_name: str, mode: str = InstallMode.GLOBAL, quiet: bool = False) -> bool:
@@ -253,7 +296,10 @@ def uninstall_hook(hook_name: str, mode: str = InstallMode.GLOBAL, quiet: bool =
     
     if not config_file.exists():
         if not quiet:
-            warn(f"No settings.json found in {mode} mode")
+            if mode == InstallMode.LOCAL:
+                warn(f"No settings.local.json found in {mode} mode")
+            else:
+                warn(f"No settings.json found in {mode} mode")
         return True
     
     # Backup current settings
@@ -290,7 +336,7 @@ def uninstall_hook(hook_name: str, mode: str = InstallMode.GLOBAL, quiet: bool =
 def uninstall_all_hooks():
     """Uninstall all hooks"""
     if not CLAUDE_CONFIG_FILE.exists():
-        warn("No settings.json found")
+        warn("No global settings.json found")
         return
     
     log("Uninstalling all hooks...")
@@ -529,11 +575,11 @@ def select_install_mode() -> str:
                 if selected == 1:
                     print(f"{Colors.REVERSE}{Colors.BOLD} ► Local {Colors.NC}")
                     print(f"   {Colors.BLUE}Install hooks for current directory only{Colors.NC}")
-                    print(f"   {Colors.DIM}.claude/ (in {Path.cwd().name}){Colors.NC}")
+                    print(f"   {Colors.DIM}.claude/settings.local.json (in {Path.cwd().name}){Colors.NC}")
                 else:
                     print(f"   {Colors.BOLD}Local{Colors.NC}")
                     print(f"   {Colors.DIM}Install hooks for current directory only{Colors.NC}")
-                    print(f"   {Colors.DIM}.claude/ (in {Path.cwd().name}){Colors.NC}")
+                    print(f"   {Colors.DIM}.claude/settings.local.json (in {Path.cwd().name}){Colors.NC}")
                 
                 print()
                 print(f"\n{Colors.DIM}↑/↓: Navigate  ENTER: Select  q: Quit{Colors.NC}")
@@ -753,8 +799,12 @@ def main():
         print("║       🐼 ethPandaOps Claude Code Hooks       ║")
         print("╚══════════════════════════════════════════════╝")
         print()
-        print("📁 Hooks location: ~/.claude/hooks/ethpandaops/")
-        print("⚙️  Settings file:  ~/.claude/settings.json")
+        print("📁 Global hooks: ~/.claude/hooks/ethpandaops/")
+        print("   Local hooks:  .claude/hooks/ethpandaops/")
+        print("⚙️  Global settings: ~/.claude/settings.json")
+        print("   Local settings:  .claude/settings.local.json")
+        print()
+        print("📚 Documentation: https://docs.anthropic.com/en/docs/claude-code/settings")
         print()
         print("⚠️  WARNING: Hooks execute code automatically.")
         print("   Always inspect before installing!")
