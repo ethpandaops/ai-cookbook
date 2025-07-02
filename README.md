@@ -23,11 +23,23 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    ```bash
    ./setup.sh
    ```
+   This will:
+   - Copy all commands from `./claude-code/commands/*` to `~/.claude/commands/ethpandaops/`
+   - Add the `scripts/` directory to your PATH
 
-3. The setup script will do the following:
-    - Copy all the commands `./claude-code/commands/*` files to `~/.claude/commands/ethpandaops/`
-    - Add the `scripts/` directory to your PATH
-4. To update commands, simply run:
+3. (Optional) Install team coding standards for automatic code style enforcement:
+   ```bash
+   ./install-code-standards.sh
+   ```
+   Claude will automatically apply ethPandaOps coding standards when working with supported languages.
+
+4. (Optional) Install Claude Code hooks:
+   ```bash
+   install-hooks.py
+   ```
+   Hooks are behind-the-scenes scripts that run before/after Claude Code operations. We have hooks like `gofmt` which automatically formats Go files after Claude Code touches them.
+
+5. To update everything, simply run:
    ```bash
    git pull
    ```
@@ -36,13 +48,14 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 
 ```
 ├── claude-code/
-│   ├── commands/          # Claude Code commands for the team
-│   └── code-standards/    # Team coding standards for Claude
-├── docs/                  # Team documentation
-├── scripts/               # Shared scripts
-├── setup.sh               # Installation script for commands
+│   ├── commands/              # Claude Code commands for the team
+│   ├── code-standards/        # Team coding standards for Claude
+│   └── hooks/                 # Claude Code hooks
+├── docs/                      # Team documentation
+├── scripts/                   # Shared scripts
+├── setup.sh                   # Installation script for commands
 ├── install-code-standards.sh  # Installation script for coding standards
-└── README.md              # This file
+└── README.md                  # This file
 ```
 
 ## 🎮 Usage
@@ -65,12 +78,41 @@ This adds instructions to `~/.claude/CLAUDE.md` telling Claude to load the lates
 - `./install-code-standards.sh --status` - Check current status
 - `./install-code-standards.sh --uninstall` - Remove standards
 
+### 🪝 Claude Code Hooks
+
+Use the `install-hooks.py` script to manage hooks that automatically run after Claude Code operations:
+
+```bash
+# Interactive mode (default when no arguments)
+install-hooks.py
+
+# List available commands
+install-hooks.py --help
+
+# List all hooks
+install-hooks.py --list
+
+# Install all hooks globally
+install-hooks.py --all --global
+
+# Install gofmt hook to current directory
+install-hooks.py --install gofmt --local
+```
+
+**Available Hooks:**
+
+- `gofmt` - Automatically formats Go files after editing
+- Additional hooks available in `claude-code/hooks/`
+
+Hooks are configured in `~/.claude/settings.json` (global) or `.claude/settings.json` (local).
+
+See [full documentation](docs/install-hooks.md) for detailed usage and options.
+
 ### 📚 Initialize AI Documentation in Any Repository
 
 **WARNING**: With the release of Claude 4 you probably don't need this script. Claude is smart enough to understand the project structure and conventions without it.
 
 Use the `init-ai-docs.py` script to set up comprehensive AI documentation in any project:
-
 
 ```bash
 # Initialize docs in current directory
@@ -95,41 +137,53 @@ See [full documentation](docs/init-ai-docs.md) for detailed usage and options.
 The following commands are available after running `setup.sh`:
 
 ### `init-project-ai-docs`
+
 Initializes top-level AI documentation for the entire project with foundational structure and project-wide rules. Use this when setting up AI documentation for a new project to establish consistent coding standards and development workflows.
 
 ### `prime-context`
+
 Reads and loads project context files (README.md, CLAUDE.md, docs) into Claude's working memory. Use this at the start of a Claude session to ensure Claude understands your project structure and conventions.
 
 ### `init-component-ai-docs`
+
 Initializes AI documentation for a specific component/directory within a project with component-specific rules. Use this when adding AI documentation to individual components or modules within an existing project structure.
 
 ### `parallel-repository-tasks`
+
 Executes the same action across multiple repositories in parallel for batch operations. Use this when you need to analyze patterns, implement changes, or audit multiple repositories simultaneously.
 
 ### `create-implementation-plan`
+
 Creates a detailed implementation plan with scaffolding for features or system enhancements (deprecated - use v2). Use this when you need a structured approach to implementing complex features with clear milestones.
 
 ### `create-implementation-plan-v2`
+
 Generates comprehensive implementation plans optimized for maximum parallelization during execution. Use this for planning complex features where you want Claude to identify and execute independent tasks concurrently.
 
 ### `review-implementation-plan`
+
 Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usally run after `create-implementation-plan-v2` has generated the plan.
 
 ### `eip`
+
 Analyzes Ethereum Improvement Proposals by fetching content and optionally deep-diving into implementations. Use this when you need to understand an EIP's specifications and see how various clients have implemented it.
 
 ### `create-feedback-loop`
+
 Creates a temporary feedback loop script that iterates with Claude until a success condition is met. Use this when you need Claude to repeatedly attempt a task (like fixing tests or meeting performance targets) until it succeeds.
 
 ### `create-presentation`
+
 Creates succinct and effective presentations in Marp format with automatic HTML generation. Use this when you need to generate professional presentations from complex topics with clear, space-efficient slides.
 
 ### `prepare-one-shot`
+
 Enables one-shot implementation mode for automated end-to-end feature development with issue creation, parallel implementation, and PR creation. Use this when you want Claude to autonomously implement a complete feature from planning through CI monitoring without manual intervention.
 
 ### Adding New Commands
 
 To add new commands:
+
 1. Create or modify files in the `claude-code/commands/` directory
 2. Commit and push your changes
 3. Team members can update by running `git pull`
