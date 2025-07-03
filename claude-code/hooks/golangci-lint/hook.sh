@@ -120,21 +120,34 @@ if [[ $exit_code -eq 0 ]]; then
     # Success: no issues found, exit silently
     exit 0
 elif [[ $exit_code -eq 1 ]]; then
-    # Issues found: send output to Claude
-    echo "$output" >&2
-    exit 2
+    # Issues found: send JSON output to Claude with continue instruction
+    issue_count=$(echo "$output" | wc -l | tr -d ' ')
+    stop_reason="golangci-lint found $issue_count issues"
+    reason="golangci-lint found $issue_count linting issues. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+
+$output"
+    jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+    exit 0
 elif [[ $exit_code -eq 3 ]]; then
-    # Failure (syntax errors, etc.): send to Claude to fix
-    echo "# golangci-lint failed due to syntax errors or compilation issues:" >&2
-    echo "$output" >&2
-    exit 2
+    # Failure (syntax errors, etc.): send JSON output to Claude
+    stop_reason="golangci-lint compilation errors"
+    reason="golangci-lint failed due to syntax errors or compilation issues. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+
+$output"
+    jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+    exit 0
 else
     # Other error (exit code 2, 4, 5, etc.): non-blocking error
-    echo "# golangci-lint failed with exit code $exit_code" >&2
     if [[ -n "$output" ]]; then
-        echo "$output" >&2
+        stop_reason="golangci-lint error (exit $exit_code)"
+        reason="golangci-lint encountered an error (exit code $exit_code). Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+
+$output"
+        jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
     else
-        echo "# No output from golangci-lint" >&2
+        stop_reason="golangci-lint failed"
+        reason="golangci-lint failed with exit code $exit_code but produced no output. This may be a configuration or tool issue. Tell the user."
+        jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
     fi
-    exit 1
+    exit 0
 fi
