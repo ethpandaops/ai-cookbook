@@ -1,0 +1,10 @@
+{
+  "name": "eslint",
+  "description": "Automatically format javascript files with eslint after editing",
+  "hook_type": "PostToolUse",
+  "matcher": "Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool",
+  "requirements": {
+    "commands": ["npx"],
+    "description": "Requires npx to be installed in PATH"
+  }
+}
