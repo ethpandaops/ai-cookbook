@@ -11,6 +11,12 @@
       "patterns": ["*.py"],
       "standards_path": "claude-code/code-standards/python/CLAUDE.md",
       "enabled": true
+    },
+    "rust": {
+      "name": "Rust",
+      "patterns": ["*.rs", "Cargo.toml", "Cargo.lock"],
+      "standards_path": "claude-code/code-standards/rust/CLAUDE.md",
+      "enabled": true
     }
   }
 }
