@@ -168,8 +168,10 @@ if command -v npx &> /dev/null; then
     config_dir=$(find_nearest_eslint_config "$file_dir" "$eslint_package_dir")
     
     if [ -z "$config_dir" ]; then
-        echo "No eslint config found between $file_dir and $eslint_package_dir" >&2
-        exit 1
+        stop_reason="no eslint config found"
+        reason="No eslint config found between $file_dir and $eslint_package_dir. Ensure an eslint configuration file exists in the project hierarchy."
+        jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+        exit 0
     fi
     
     echo "Found eslint config in: $config_dir" >&2
@@ -187,10 +189,37 @@ if command -v npx &> /dev/null; then
     if [ $eslint_exit_code -eq 0 ]; then
         echo "Successfully formatted $file_path with eslint from $config_dir"
     else
-        echo "eslint failed for $file_path (exit code: $eslint_exit_code)" >&2
-        exit 1
+        # Capture eslint output for error reporting
+        eslint_output=$(cd "$config_dir" && eval "$eslint_cmd" 2>&1) || true
+        
+        if [ $eslint_exit_code -eq 1 ]; then
+            # ESLint found linting errors
+            issue_count=$(echo "$eslint_output" | grep -E "^[[:space:]]*[0-9]+:[0-9]+" | wc -l | tr -d ' ')
+            stop_reason="eslint found $issue_count issues"
+            reason="eslint found $issue_count linting issues in $file_path. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+
+$eslint_output"
+            jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+        elif [ $eslint_exit_code -eq 2 ]; then
+            # Configuration or other eslint error
+            stop_reason="eslint configuration error"
+            reason="eslint encountered a configuration error. Review and fix this issue using a subtask if it's not expected, then continue with your original task.
+
+$eslint_output"
+            jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+        else
+            # Other unexpected exit codes
+            stop_reason="eslint error (exit $eslint_exit_code)"
+            reason="eslint failed with exit code $eslint_exit_code. Review and fix this issue using a subtask if it's not expected, then continue with your original task.
+
+$eslint_output"
+            jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+        fi
+        exit 0
     fi
 else
-    echo "Error: npx not found. Please ensure npx is installed and available via npx" >&2
-    exit 1
+    stop_reason="npx not found"
+    reason="Error: npx not found. Please ensure npx is installed and available via npx"
+    jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+    exit 0
 fi
