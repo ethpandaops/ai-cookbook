@@ -4,7 +4,7 @@
   "hook_type": "PostToolUse",
   "matcher": "Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool",
   "requirements": {
-    "commands": ["npx"],
+    "commands": ["npx", "jq"],
     "description": "Requires npx to be installed in PATH"
   }
 }
