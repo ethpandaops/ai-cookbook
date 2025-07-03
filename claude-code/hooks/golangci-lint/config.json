@@ -1,0 +1,10 @@
+{
+  "name": "golangci-lint",
+  "description": "Runs golangci-lint on Go files to catch linting issues",
+  "hook_type": "PostToolUse",
+  "matcher": "Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool",
+  "requirements": {
+    "commands": ["golangci-lint", "jq"],
+    "description": "Requires golangci-lint and jq to be installed"
+  }
+}
