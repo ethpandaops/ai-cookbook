@@ -1,15 +1,20 @@
-# 🐼 ethPandaOps AI Cookbook 🍳
+<div align="center">
+  <img src="./images/wok.png" alt="ethPandaOps AI Cookbook" width="350">
+  <h1>🐼 ethPandaOps AI Cookbook 🍳</h1>
+   <h4><i>Get the wok out</i></h4>
+</div>
+<hr style="height: 1px; background-color: #e1e4e8; border: none;">
 
-A centralized repository for AI documentation, commands, and tools used by the ethPandaOps team.
+This repo is a shared, centralized location for the team to put common workflows and tools that we've found useful in our AI use. While the team is the main contributors/users, external contributions are certainly welcome.
 
-![image](./images/wok.png)
+The majority of this repo focuses around [Claude Code](https://claude.ai/code) integrations. You can pick and choose which tools and features you want, but we have an ever-evolving recommended set [here](./recommended-tools.yaml) which can be automatically installed with `ai-cookbook recommended --yes`.
 
-## 📋 Overview
+### ✨ Available Tools
 
-This repository serves as a shared resource for the ethPandaOps team to store and maintain:
-- Claude Code commands and workflows
-- Shared scripts and utilities
-- Team conventions and best practices
+- [Claude Code - Commands](./claude-code/commands) - reusable slash commands that we use every day.
+- [Claude Code - Code Standards](./claude-code/code-standards) - supports multiple languages with minimal token overhead.
+- [Claude Code - Hooks](./claude-code/hooks) - before/after hooks that put Claude Code on rails. e.g. `gofmt` after Claude touches a `.go` file.
+- [Scripts](./scripts) - scripts that we find useful, like programatically creating `CLAUDE.md` recursively in a project
 
 ## 🚀 Quick Start
 
@@ -42,131 +47,8 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    ai-cookbook recommended
    ```
 
-## ✨ Features
 
-### Claude Commands
-Commands for Claude Code that automate complex development workflows.
-
-### Code Standards
-Automatic code style enforcement that Claude applies when working with certain languages.
-
-### Hooks
-Behind-the-scenes automation that runs before/after Claude Code operations.
-
-### Scripts
-Shared utilities available in your PATH.
-
-### Recommended Configuration
-The team maintains a curated set of recommended tools in `recommended-tools.yaml`. This ensures everyone has a consistent, optimal setup for AI-assisted development.
-
-## 🛠️ Installation
-
-### Recommended Installation (Fastest)
-```bash
-# Clone and install
-git clone https://github.com/ethpandaops/ai-cookbook.git
-cd ai-cookbook
-./setup.sh
-
-# Install team's recommended configuration
-ai-cookbook recommended
-```
-
-### Custom Installation
-```bash
-# Clone and install
-git clone https://github.com/ethpandaops/ai-cookbook.git
-cd ai-cookbook
-./setup.sh
-
-# Launch interactive installer for custom selection
-ai-cookbook
-```
-
-### Interactive Interface
-The installer provides an intuitive interface with:
-- **Component Selection**: Choose Commands, Code Standards, Hooks, or Scripts
-- **Individual Management**: Install/uninstall specific items within each component
-- **Visual Status**: See what's installed with color-coded indicators
-- **Detailed Information**: Press 'd' for details about selected items
-- **Batch Operations**: Install/uninstall all items in a category
-
-### Navigation
-- **Arrow Keys**: Navigate through components and items
-- **Enter**: Install/uninstall selected item or open component submenu
-- **d**: Toggle details view
-- **a**: Install all items in current category
-- **r**: Remove all items in current category
-- **m**: Change mode (for hooks: global vs local)
-- **q**: Go back or quit
-
-## 📁 Repository Structure
-
-```
-├── claude-code/
-│   ├── commands/              # Claude Code commands for the team
-│   ├── code-standards/        # Team coding standards for Claude
-│   └── hooks/                 # Claude Code hooks
-├── docs/                      # Team documentation
-├── scripts/                   # Shared scripts and utilities
-├── src/                       # Installer source code
-│   └── ai_cookbook/          # Main installer package
-│       ├── installers/       # Component-specific installers
-│       ├── config/          # Configuration and settings
-│       └── utils/           # Shared utilities
-├── setup.sh                  # Quick installer script
-└── README.md                 # This file
-```
-
-## 🎮 Usage
-
-### Getting Started
-After installation, Claude Code commands are immediately available. Start any Claude Code session and reference commands by name.
-
-### ⚡ Recommended Tools Command
-The fastest way to get up and running with the team's standard configuration:
-
-```bash
-# Install all recommended tools automatically
-ai-cookbook recommended
-
-# Skip confirmation prompts for automation
-ai-cookbook recommended --yes
-
-# Install individual tools with the interactive installer
-ai-cookbook
-```
-
-This command:
-- ✅ Installs all team-recommended tools (commands, code standards, hooks, scripts)
-- 🔒 Only removes Claude tools it knows are ethPandaOps-managed for safety
-
-The recommended configuration is defined in `recommended-tools.yaml` and maintained by the team.
-
-### 📚 Initialize AI Documentation in Any Repository
-
-**WARNING**: With the release of Claude 4 you probably don't need this script. Claude is smart enough to understand the project structure and conventions without it.
-
-Use the `init-ai-docs.py` script to set up comprehensive AI documentation in any project:
-
-```bash
-# Initialize docs in current directory
-init-ai-docs.py
-
-# Initialize docs in specific project
-init-ai-docs.py /path/to/project
-
-# Preview what will be created
-init-ai-docs.py --dry-run
-```
-
-This creates:
-- Project-level CLAUDE.md and .cursor/rules/
-- Component-level CLAUDE.md files
-- Compatible with Cursor, Claude Code, and other AI tools
-
-See [full documentation](docs/init-ai-docs.md) for detailed usage and options.
-
+# Tools
 ## 🛠️ Claude Code Commands
 
 The following commands are available after installation:
