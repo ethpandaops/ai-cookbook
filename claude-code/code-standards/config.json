@@ -17,6 +17,12 @@
       "patterns": ["*.rs", "Cargo.toml", "Cargo.lock"],
       "standards_path": "claude-code/code-standards/rust/CLAUDE.md",
       "enabled": true
+    },
+    "tailwind": {
+      "name": "Tailwind",
+      "patterns": ["*.css", "*.tsx", "*.jsx", "*.js", "*.ts", "*.mdx", "*.html", "*.vue", "*.svelte", "*.astro"],
+      "standards_path": "claude-code/code-standards/tailwindcss/CLAUDE.md",
+      "enabled": true
     }
   }
 }
