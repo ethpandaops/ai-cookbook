@@ -1,0 +1,10 @@
+{
+  "name": "ast-grep",
+  "description": "Provides gentle feedback when grep is used on code files, suggesting ast-grep for syntax-aware searches",
+  "hook_type": "PostToolUse",
+  "matcher": "Grep|Bash",
+  "requirements": {
+    "commands": ["ast-grep", "jq"],
+    "description": "Requires ast-grep and jq to be installed"
+  }
+}
