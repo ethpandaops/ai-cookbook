@@ -1,135 +1,88 @@
 #!/bin/bash
-
-# EthPandaOps AI Cookbook Setup Script
-# This script:
-# 1. Copies command files to ~/.claude/commands/ethpandaops/
-# 2. Adds the scripts directory to PATH (if not already present)
-
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMMANDS_DIR="$SCRIPT_DIR/claude-code/commands"
-SCRIPTS_DIR="$SCRIPT_DIR/scripts"
-CLAUDE_DIR="$HOME/.claude"
-CLAUDE_COMMANDS_DIR="$CLAUDE_DIR/commands"
-TARGET_DIR="$CLAUDE_COMMANDS_DIR/ethpandaops"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-echo "🐼 EthPandaOps AI Cookbook Setup"
-echo "================================"
+# Functions
+print_success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
 
-# Check if claude-code/commands directory exists
-if [ ! -d "$COMMANDS_DIR" ]; then
-    echo "❌ Error: claude-code/commands directory not found at $COMMANDS_DIR"
+print_error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+print_info() {
+    echo -e "${YELLOW}ℹ${NC} $1"
+}
+
+# Check if we're in the right directory
+if [ ! -d "src/ai_cookbook" ]; then
+    print_error "This script must be run from the root of the ai-cookbook repository"
     exit 1
 fi
 
-# Create ~/.claude directory if it doesn't exist
-if [ ! -d "$CLAUDE_DIR" ]; then
-    echo "📁 Creating ~/.claude directory..."
-    mkdir -p "$CLAUDE_DIR"
+# Check Python version
+if ! python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)" 2>/dev/null; then
+    print_error "Python 3.8 or higher is required"
+    exit 1
 fi
 
-# Create ~/.claude/commands directory if it doesn't exist
-if [ ! -d "$CLAUDE_COMMANDS_DIR" ]; then
-    echo "📁 Creating ~/.claude/commands directory..."
-    mkdir -p "$CLAUDE_COMMANDS_DIR"
-fi
+print_info "Setting up ai-cookbook..."
 
-# Remove existing ethpandaops directory if it exists
-if [ -d "$TARGET_DIR" ]; then
-    echo "🧹 Removing existing ethpandaops commands directory..."
-    rm -rf "$TARGET_DIR"
-fi
+# No external dependencies needed
 
-# Create the ethpandaops directory
-echo "📁 Creating ethpandaops commands directory..."
-mkdir -p "$TARGET_DIR"
+# Get the absolute path to this directory
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Copy all .md files from commands directory
-echo "📋 Copying command files..."
-commands_copied=0
+# Create a simple wrapper script
+SCRIPT_CONTENT="#!/bin/bash
+# ai-cookbook wrapper script
+PYTHONPATH=\"$REPO_ROOT/src:\$PYTHONPATH\" python3 -m ai_cookbook.main \"\$@\"
+"
 
-for command_file in "$COMMANDS_DIR"/*.md; do
-    if [ -f "$command_file" ]; then
-        filename=$(basename "$command_file")
-        cp "$command_file" "$TARGET_DIR/$filename"
-        echo "   ✅ Copied: $filename"
-        commands_copied=$((commands_copied + 1))
-    fi
-done
-
-if [ $commands_copied -eq 0 ]; then
-    echo "   ⚠️  No .md files found in $COMMANDS_DIR"
-fi
-
-# Handle PATH modification for scripts directory
-echo ""
-echo "🔧 Setting up scripts PATH..."
-
-# Check if scripts directory exists
-if [ ! -d "$SCRIPTS_DIR" ]; then
-    echo "📁 Creating scripts directory..."
-    mkdir -p "$SCRIPTS_DIR"
-fi
-
-# Detect shell and profile file
-SHELL_NAME=$(basename "$SHELL")
-case "$SHELL_NAME" in
-    "bash")
-        PROFILE_FILE="$HOME/.bashrc"
-        if [ ! -f "$PROFILE_FILE" ] && [ -f "$HOME/.bash_profile" ]; then
-            PROFILE_FILE="$HOME/.bash_profile"
-        fi
-        ;;
-    "zsh")
-        PROFILE_FILE="$HOME/.zshrc"
-        ;;
-    *)
-        PROFILE_FILE="$HOME/.profile"
-        ;;
-esac
-
-# Check if PATH already contains the scripts directory
-if echo "$PATH" | grep -q "$SCRIPTS_DIR"; then
-    echo "   ✅ Scripts directory already in PATH"
-    PATH_UPDATED=false
-else
-    # Check if the PATH export is already in the profile file
-    PATH_EXPORT="export PATH=\"\$PATH:$SCRIPTS_DIR\""
-    if [ -f "$PROFILE_FILE" ] && grep -Fq "$SCRIPTS_DIR" "$PROFILE_FILE"; then
-        echo "   ✅ Scripts directory already configured in $PROFILE_FILE"
-        PATH_UPDATED=false
+# Detect user's shell and shell profile
+if [[ "$SHELL" == *"zsh"* ]]; then
+    PROFILE_FILE="$HOME/.zshrc"
+elif [[ "$SHELL" == *"bash"* ]]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        PROFILE_FILE="$HOME/.bash_profile"
     else
-        echo "   📝 Adding scripts directory to PATH in $PROFILE_FILE"
-        echo "" >> "$PROFILE_FILE"
-        echo "# EthPandaOps AI Cookbook scripts" >> "$PROFILE_FILE"
-        echo "$PATH_EXPORT" >> "$PROFILE_FILE"
-        echo "   ✅ Added to $PROFILE_FILE"
-        PATH_UPDATED=true
+        PROFILE_FILE="$HOME/.bashrc"
     fi
+else
+    PROFILE_FILE="$HOME/.profile"
 fi
 
-echo ""
-if [ $commands_copied -gt 0 ] || [ "$PATH_UPDATED" = true ]; then
-    echo "✅ Setup completed successfully!"
-    echo ""
-    echo "📋 Summary:"
-    echo "   • Commands directory: $COMMANDS_DIR"
-    if [ $commands_copied -gt 0 ]; then
-        echo "   • Copied $commands_copied files to $TARGET_DIR"
-    fi
-    echo "   • Scripts directory: $SCRIPTS_DIR"
-    if [ "$PATH_UPDATED" = true ]; then
-        echo "   • Added scripts directory to PATH in $PROFILE_FILE"
-    fi
-    echo ""
-    echo "🚀 Next steps:"
-    echo "   • Commands are now available in Claude Code"
-    if [ "$PATH_UPDATED" = true ]; then
-        echo "   • Restart your terminal or run 'source $PROFILE_FILE' to use scripts"
-    fi
-    echo "   • Run './setup.sh' again after adding new commands or scripts"
-    echo "   • Add new commands to claude-code/commands/ and scripts to scripts/"
-else
-    echo "✅ All components already configured!"
+# Create bin directory in home if it doesn't exist
+mkdir -p "$HOME/bin"
+
+# Write the wrapper script
+echo "$SCRIPT_CONTENT" > "$HOME/bin/ai-cookbook"
+chmod +x "$HOME/bin/ai-cookbook"
+
+# Add ~/bin to PATH if not already there
+if ! echo "$PATH" | grep -q "$HOME/bin"; then
+    echo "" >> "$PROFILE_FILE"
+    echo "# Added by ethpandaops/ai-cookbook installer" >> "$PROFILE_FILE"
+    echo "export PATH=\"\$HOME/bin:\$PATH\"" >> "$PROFILE_FILE"
+    print_info "Added ~/bin to PATH in $PROFILE_FILE"
+    print_info "You may need to restart your shell or run: source $PROFILE_FILE"
 fi
+
+print_success "ai-cookbook installed successfully!"
+echo ""
+print_info "You can now run: ai-cookbook"
+print_info "Or if PATH isn't updated yet: ~/bin/ai-cookbook"
+echo ""
+print_info "The interactive installer provides the following options:"
+echo "  • Claude Commands - AI-assisted development commands"
+echo "  • Code Standards - Language-specific coding standards"
+echo "  • Hooks - Automated formatting and linting"
+echo "  • Scripts - Add utility scripts to PATH"
+echo ""
+print_info "Run 'ai-cookbook' to get started!"

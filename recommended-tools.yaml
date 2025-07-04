@@ -1,0 +1,30 @@
+# ethPandaOps AI Cookbook - Recommended Tools Configuration
+# This file defines the exact set of tools that the ethPandaOps team recommends
+# Running 'ai-cookbook recommended' will install these tools and uninstall any
+# ethPandaOps tools not in this configuration
+
+# Core AI development commands that are essential for the team
+commands:
+  - create-implementation-plan-v3.md
+  - parallel-repository-tasks.md
+  - eip.md
+  - review-implementation-plan.md
+
+
+# Language-specific coding standards for consistent code quality
+code_standards:
+  - go
+  - python
+  - rust
+  - tailwindcss
+
+# Essential development hooks for automated code quality
+hooks:
+  - eslint
+  - gofmt
+  - golangci-lint
+  - typescript
+
+# Utility scripts for project management and automation (installed as a group)
+scripts: []
+

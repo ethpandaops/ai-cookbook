@@ -1,0 +1,435 @@
+Metadata-Version: 2.4
+Name: pandaops-cookbook
+Version: 1.0.0
+Summary: Unified installation system for ethPandaOps AI cookbook
+Home-page: https://github.com/ethpandaops/ai-cookbook
+Author: ethPandaOps
+Author-email: ethpandaops@ethereum.org
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Tools
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: requires-python
+Dynamic: summary
+
+# 🐼 ethPandaOps AI Cookbook 🍳
+
+A centralized repository for AI documentation, commands, and tools used by the ethPandaOps team.
+
+![image](./images/wok.png)
+
+## 📋 Overview
+
+This repository serves as a shared resource for the ethPandaOps team to store and maintain:
+- Claude Code commands and workflows
+- Shared scripts and utilities
+- Team conventions and best practices
+
+## 🚀 Quick Start
+
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/ethpandaops/ai-cookbook.git
+   cd ai-cookbook
+   ```
+
+2. Run the unified installer to set up all tools:
+   ```bash
+   ./install.py
+   ```
+   This will start an interactive installation process that lets you choose which components to install.
+
+3. (Alternative) Use command line options for automated installation:
+   ```bash
+   # Install everything
+   ./install.py --all
+   
+   # Install specific components
+   ./install.py --commands --code-standards --hooks
+   
+   # Install globally (affects all projects)
+   ./install.py --all --global
+   ```
+
+4. To update everything, simply run:
+   ```bash
+   git pull
+   ./install.py --all
+   ```
+
+## ✨ Features
+
+### Claude Commands
+Professional-grade commands for Claude Code that automate complex development workflows:
+- **Implementation Planning**: Create detailed, parallelizable implementation plans
+- **Context Management**: Load project context and documentation
+- **Repository Operations**: Batch operations across multiple repositories
+- **Documentation**: Generate AI-optimized documentation structures
+- **EIP Analysis**: Analyze Ethereum Improvement Proposals
+- **Presentations**: Create professional Marp presentations
+- **One-shot Development**: Autonomous feature development from planning to PR
+
+### Code Standards
+Automatic code style enforcement that Claude applies when working with your projects:
+- **Go Standards**: Formatting, naming conventions, error handling patterns
+- **Python Standards**: PEP compliance, type hints, documentation standards
+- **Automatic Application**: Claude automatically applies standards when editing files
+- **Team Consistency**: Ensures consistent code style across all team members
+
+### Hooks
+Behind-the-scenes automation that runs before/after Claude Code operations:
+- **gofmt Hook**: Automatically formats Go files after Claude edits them
+- **Global/Local Scope**: Install hooks globally or per-project
+- **Extensible**: Easy to add new hooks for other languages and tools
+
+### Scripts
+Shared utilities available in your PATH:
+- **AI Documentation**: Initialize comprehensive AI docs in any project
+- **Installation Tools**: Manage all cookbook components
+- **Development Utilities**: Common development workflows
+
+## 🛠️ Installation Options
+
+### Interactive Installation (Recommended)
+Run the installer without arguments for an interactive experience:
+```bash
+./install.py
+```
+
+The installer will guide you through:
+1. Component selection (Commands, Code Standards, Hooks, Scripts)
+2. Scope selection (Global vs Local)
+3. Confirmation and installation
+4. Status reporting
+
+### Command Line Installation
+For automation or quick setups:
+
+```bash
+# Install everything globally
+./install.py --all --global
+
+# Install specific components locally
+./install.py --commands --code-standards --local
+
+# Install hooks only
+./install.py --hooks
+
+# Check status of all components
+./install.py --status
+
+# List available options
+./install.py --help
+```
+
+### Component-Specific Commands
+
+**Commands:**
+```bash
+# Install all Claude Code commands
+./install.py --commands
+
+# Equivalent to old setup.sh
+```
+
+**Code Standards:**
+```bash
+# Install coding standards
+./install.py --code-standards
+
+# Equivalent to old install-code-standards.sh
+# Check status
+./install.py --code-standards --status
+```
+
+**Hooks:**
+```bash
+# Install hooks interactively
+./install.py --hooks
+
+# Install all hooks globally
+./install.py --hooks --all --global
+
+# Equivalent to old install-hooks.py functionality
+```
+
+**Scripts:**
+```bash
+# Add scripts to PATH
+./install.py --scripts
+
+# Equivalent to old setup.sh PATH addition
+```
+
+## 🔄 Migration from Old Scripts
+
+The new unified installer replaces several individual scripts:
+
+| Old Script | New Command | Notes |
+|------------|-------------|-------|
+| `./setup.sh` | `./install.py --commands --scripts` | Install commands and add scripts to PATH |
+| `./install-code-standards.sh` | `./install.py --code-standards` | Install coding standards |
+| `./install-hooks.py` | `./install.py --hooks` | Manage Claude Code hooks |
+| All together | `./install.py --all` | Install everything at once |
+
+**Migration Steps:**
+1. Run `./install.py --status` to see current installation state
+2. Use `./install.py --all` to ensure everything is properly installed
+3. Old scripts will continue to work but are deprecated
+
+## 📁 Repository Structure
+
+```
+├── claude-code/
+│   ├── commands/              # Claude Code commands for the team
+│   ├── code-standards/        # Team coding standards for Claude
+│   └── hooks/                 # Claude Code hooks
+├── docs/                      # Team documentation
+├── scripts/                   # Shared scripts and utilities
+├── src/                       # Installer source code
+│   ├── install.py            # Unified installer
+│   ├── components/           # Component-specific installers
+│   └── utils/               # Shared utilities
+├── install.py                # Main installer entry point
+├── setup.sh                  # Legacy installation script (deprecated)
+├── install-code-standards.sh # Legacy standards installer (deprecated)
+└── README.md                 # This file
+```
+
+## 🎮 Usage
+
+### Getting Started
+After installation, Claude Code commands are immediately available. Start any Claude Code session and reference commands by name.
+
+### 📚 Initialize AI Documentation in Any Repository
+
+**WARNING**: With the release of Claude 4 you probably don't need this script. Claude is smart enough to understand the project structure and conventions without it.
+
+Use the `init-ai-docs.py` script to set up comprehensive AI documentation in any project:
+
+```bash
+# Initialize docs in current directory
+init-ai-docs.py
+
+# Initialize docs in specific project
+init-ai-docs.py /path/to/project
+
+# Preview what will be created
+init-ai-docs.py --dry-run
+```
+
+This creates:
+- Project-level CLAUDE.md and .cursor/rules/
+- Component-level CLAUDE.md files
+- Compatible with Cursor, Claude Code, and other AI tools
+
+See [full documentation](docs/init-ai-docs.md) for detailed usage and options.
+
+## 🛠️ Claude Code Commands
+
+The following commands are available after installation:
+
+### `init-project-ai-docs`
+
+Initializes top-level AI documentation for the entire project with foundational structure and project-wide rules. Use this when setting up AI documentation for a new project to establish consistent coding standards and development workflows.
+
+### `prime-context`
+
+Reads and loads project context files (README.md, CLAUDE.md, docs) into Claude's working memory. Use this at the start of a Claude session to ensure Claude understands your project structure and conventions.
+
+### `init-component-ai-docs`
+
+Initializes AI documentation for a specific component/directory within a project with component-specific rules. Use this when adding AI documentation to individual components or modules within an existing project structure.
+
+### `parallel-repository-tasks`
+
+Executes the same action across multiple repositories in parallel for batch operations. Use this when you need to analyze patterns, implement changes, or audit multiple repositories simultaneously.
+
+### `create-implementation-plan`
+
+Creates a detailed implementation plan with scaffolding for features or system enhancements (deprecated - use v2). Use this when you need a structured approach to implementing complex features with clear milestones.
+
+### `create-implementation-plan-v2`
+
+Generates comprehensive implementation plans optimized for maximum parallelization during execution. Use this for planning complex features where you want Claude to identify and execute independent tasks concurrently.
+
+### `review-implementation-plan`
+
+Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usally run after `create-implementation-plan-v2` has generated the plan.
+
+### `eip`
+
+Analyzes Ethereum Improvement Proposals by fetching content and optionally deep-diving into implementations. Use this when you need to understand an EIP's specifications and see how various clients have implemented it.
+
+### `create-feedback-loop`
+
+Creates a temporary feedback loop script that iterates with Claude until a success condition is met. Use this when you need Claude to repeatedly attempt a task (like fixing tests or meeting performance targets) until it succeeds.
+
+### `create-presentation`
+
+Creates succinct and effective presentations in Marp format with automatic HTML generation. Use this when you need to generate professional presentations from complex topics with clear, space-efficient slides.
+
+### `prepare-one-shot`
+
+Enables one-shot implementation mode for automated end-to-end feature development with issue creation, parallel implementation, and PR creation. Use this when you want Claude to autonomously implement a complete feature from planning through CI monitoring without manual intervention.
+
+## 🏗️ Development
+
+### Adding New Components
+
+**Claude Code Commands:**
+
+1. Create or modify files in the `claude-code/commands/` directory
+2. Test your command in a Claude Code session
+3. Update documentation if needed
+
+**Code Standards:**
+
+1. Add new language standards to `claude-code/code-standards/`
+2. Follow the existing pattern for CLAUDE.md files
+3. Update the installer to recognize new languages
+
+**Hooks:**
+
+1. Create new hook scripts in `claude-code/hooks/`
+2. Add hook configuration to the hooks installer
+3. Test hooks in both global and local configurations
+
+**Scripts:**
+
+1. Add new utilities to the `scripts/` directory
+2. Ensure scripts are executable (`chmod +x`)
+3. Follow shell scripting best practices
+
+### Testing Changes
+
+```bash
+# Test the installer
+./install.py --dry-run
+
+# Test specific components
+./install.py --commands --dry-run
+./install.py --code-standards --status
+./install.py --hooks --list
+
+# Test in a clean environment
+cd /tmp
+git clone https://github.com/ethpandaops/ai-cookbook.git
+cd ai-cookbook
+./install.py --all
+```
+
+### Installer Architecture
+
+The unified installer is built with a modular architecture:
+
+```text
+src/
+├── install.py              # Main installer logic
+├── components/             # Component-specific installers
+│   ├── commands.py        # Claude Code commands installer
+│   ├── code_standards.py  # Code standards installer
+│   ├── hooks.py           # Hooks installer
+│   └── scripts.py         # Scripts installer
+└── utils/                 # Shared utilities
+    ├── file_operations.py # File system operations
+    ├── shell_integration.py # Shell profile management
+    └── interactive.py     # Interactive prompts
+```
+
+Each component installer implements a standard interface:
+
+- `install()` - Install the component
+- `uninstall()` - Remove the component
+- `status()` - Check installation status
+- `list_items()` - List available items
+
+## 📋 Requirements
+
+### System Requirements
+
+- **Operating System**: macOS, Linux, or Windows (with WSL)
+- **Python**: 3.7 or higher
+- **Shell**: bash, zsh, or fish
+- **Git**: For cloning and updating the repository
+
+### Claude Code Requirements
+
+- **Claude Code**: Latest version recommended
+- **Claude Account**: Active subscription for AI features
+- **Internet Connection**: Required for Claude API access
+
+### Optional Dependencies
+
+- **Go**: Required for `gofmt` hook functionality
+- **Node.js**: Required for some development scripts
+- **Make**: Required for some project automation
+
+### Installation Dependencies
+
+The installer will check for and install required dependencies:
+
+- Python standard library modules
+- Shell profile access (for PATH modifications)
+- Directory creation permissions (for `~/.claude/`)
+
+## 🤝 Contributing
+
+1. Create a branch for your changes
+2. Add your commands, documentation, or scripts
+3. Test your changes with the installer
+4. Update documentation as needed
+5. Create a pull request for review
+6. After approval, merge to main
+
+### Development Guidelines
+
+- Follow existing code patterns and conventions
+- Test all installer functionality before submitting
+- Update documentation for any user-facing changes
+- Ensure backward compatibility with existing installations
+- Add appropriate error handling and user feedback
+
+## 🆘 Support
+
+For questions or issues, please create an issue in this repository or reach out to the ethPandaOps team.
+
+### Common Issues
+
+**Installation Problems:**
+
+- Ensure Python 3.7+ is installed
+- Check file permissions for `~/.claude/` directory
+- Verify shell profile is accessible
+
+**Command Not Found:**
+
+- Run `./install.py --status` to check installation
+- Restart your shell or run `source ~/.bashrc` (or equivalent)
+- Ensure commands are installed with `./install.py --commands`
+
+**Hooks Not Working:**
+
+- Check Claude Code settings in `~/.claude/settings.json`
+- Verify hook scripts are executable
+- Run `./install.py --hooks --status` to check configuration
+
+**Code Standards Not Applied:**
+
+- Ensure standards are installed with `./install.py --code-standards --status`
+- Check that `~/.claude/CLAUDE.md` contains ethPandaOps standards reference
+- Verify Claude Code is reading global configuration files
