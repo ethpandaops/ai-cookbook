@@ -19,32 +19,88 @@ This repository serves as a shared resource for the ethPandaOps team to store an
    cd ai-cookbook
    ```
 
-2. Run the setup script to install Claude Code commands & scripts:
+2. Run the installer to set up all tools:
    ```bash
    ./setup.sh
    ```
-   This will:
-   - Copy all commands from `./claude-code/commands/*` to `~/.claude/commands/ethpandaops/`
-   - Add the `scripts/` directory to your PATH
 
-3. (Optional) Install team coding standards for automatic code style enforcement:
+3. Install recommended tools (fastest option):
    ```bash
-   ./install-code-standards.sh
+   ai-cookbook recommended
    ```
-   Claude will automatically apply ethPandaOps coding standards when working with supported languages.
+   This installs the team's recommended configuration automatically.
 
-4. (Optional) Install Claude Code hooks:
+4. Or launch the interactive installer for custom selection:
    ```bash
-   install-hooks.py
+   ai-cookbook
    ```
-   Hooks are behind-the-scenes scripts that run before/after Claude Code operations. We have hooks like `gofmt` which automatically formats Go files after Claude Code touches them.
+   Use arrow keys to navigate, Enter to select components, and 'q' to quit.
 
 5. To update everything, simply run:
    ```bash
    git pull
+   ai-cookbook recommended
    ```
 
-## 📁 Structure
+## ✨ Features
+
+### Claude Commands
+Commands for Claude Code that automate complex development workflows.
+
+### Code Standards
+Automatic code style enforcement that Claude applies when working with certain languages.
+
+### Hooks
+Behind-the-scenes automation that runs before/after Claude Code operations.
+
+### Scripts
+Shared utilities available in your PATH.
+
+### Recommended Configuration
+The team maintains a curated set of recommended tools in `recommended-tools.yaml`. This ensures everyone has a consistent, optimal setup for AI-assisted development.
+
+## 🛠️ Installation
+
+### Recommended Installation (Fastest)
+```bash
+# Clone and install
+git clone https://github.com/ethpandaops/ai-cookbook.git
+cd ai-cookbook
+./setup.sh
+
+# Install team's recommended configuration
+ai-cookbook recommended
+```
+
+### Custom Installation
+```bash
+# Clone and install
+git clone https://github.com/ethpandaops/ai-cookbook.git
+cd ai-cookbook
+./setup.sh
+
+# Launch interactive installer for custom selection
+ai-cookbook
+```
+
+### Interactive Interface
+The installer provides an intuitive interface with:
+- **Component Selection**: Choose Commands, Code Standards, Hooks, or Scripts
+- **Individual Management**: Install/uninstall specific items within each component
+- **Visual Status**: See what's installed with color-coded indicators
+- **Detailed Information**: Press 'd' for details about selected items
+- **Batch Operations**: Install/uninstall all items in a category
+
+### Navigation
+- **Arrow Keys**: Navigate through components and items
+- **Enter**: Install/uninstall selected item or open component submenu
+- **d**: Toggle details view
+- **a**: Install all items in current category
+- **r**: Remove all items in current category
+- **m**: Change mode (for hooks: global vs local)
+- **q**: Go back or quit
+
+## 📁 Repository Structure
 
 ```
 ├── claude-code/
@@ -52,61 +108,40 @@ This repository serves as a shared resource for the ethPandaOps team to store an
 │   ├── code-standards/        # Team coding standards for Claude
 │   └── hooks/                 # Claude Code hooks
 ├── docs/                      # Team documentation
-├── scripts/                   # Shared scripts
-├── setup.sh                   # Installation script for commands
-├── install-code-standards.sh  # Installation script for coding standards
-└── README.md                  # This file
+├── scripts/                   # Shared scripts and utilities
+├── src/                       # Installer source code
+│   └── ai_cookbook/          # Main installer package
+│       ├── installers/       # Component-specific installers
+│       ├── config/          # Configuration and settings
+│       └── utils/           # Shared utilities
+├── setup.sh                  # Quick installer script
+└── README.md                 # This file
 ```
 
 ## 🎮 Usage
 
-After running `setup.sh`, the commands will be available in Claude Code. You can use them by referencing the command name in your Claude Code sessions.
+### Getting Started
+After installation, Claude Code commands are immediately available. Start any Claude Code session and reference commands by name.
 
-### 📋 EthPandaOps Coding Standards
-
-Install team coding standards that Claude will automatically apply:
-
-```bash
-./install-code-standards.sh
-```
-
-This adds instructions to `~/.claude/CLAUDE.md` telling Claude to load the latest coding standards from the local ai-cookbook repository when working with supported languages.
-
-**Commands:**
-
-- `./install-code-standards.sh` - Install/update standards (default)
-- `./install-code-standards.sh --status` - Check current status
-- `./install-code-standards.sh --uninstall` - Remove standards
-
-### 🪝 Claude Code Hooks
-
-Use the `install-hooks.py` script to manage hooks that automatically run after Claude Code operations:
+### ⚡ Recommended Tools Command
+The fastest way to get up and running with the team's standard configuration:
 
 ```bash
-# Interactive mode (default when no arguments)
-install-hooks.py
+# Install all recommended tools automatically
+ai-cookbook recommended
 
-# List available commands
-install-hooks.py --help
+# Skip confirmation prompts for automation
+ai-cookbook recommended --yes
 
-# List all hooks
-install-hooks.py --list
-
-# Install all hooks globally
-install-hooks.py --all --global
-
-# Install gofmt hook to current directory
-install-hooks.py --install gofmt --local
+# Install individual tools with the interactive installer
+ai-cookbook
 ```
 
-**Available Hooks:**
+This command:
+- ✅ Installs all team-recommended tools (commands, code standards, hooks, scripts)
+- 🔒 Only removes Claude tools it knows are ethPandaOps-managed for safety
 
-- `gofmt` - Automatically formats Go files after editing
-- Additional hooks available in `claude-code/hooks/`
-
-Hooks are configured in `~/.claude/settings.json` (global) or `.claude/settings.json` (local).
-
-See [full documentation](docs/install-hooks.md) for detailed usage and options.
+The recommended configuration is defined in `recommended-tools.yaml` and maintained by the team.
 
 ### 📚 Initialize AI Documentation in Any Repository
 
@@ -134,7 +169,7 @@ See [full documentation](docs/init-ai-docs.md) for detailed usage and options.
 
 ## 🛠️ Claude Code Commands
 
-The following commands are available after running `setup.sh`:
+The following commands are available after installation:
 
 ### `init-project-ai-docs`
 
@@ -160,9 +195,13 @@ Creates a detailed implementation plan with scaffolding for features or system e
 
 Generates comprehensive implementation plans optimized for maximum parallelization during execution. Use this for planning complex features where you want Claude to identify and execute independent tasks concurrently.
 
+### `create-implementation-plan-v3`
+
+Enhanced implementation planning with improved analysis, dependency management, and execution tracking. Use this for the most sophisticated planning needs with automated progress monitoring.
+
 ### `review-implementation-plan`
 
-Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usally run after `create-implementation-plan-v2` has generated the plan.
+Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usually run after `create-implementation-plan-v2` has generated the plan.
 
 ### `eip`
 
@@ -180,21 +219,64 @@ Creates succinct and effective presentations in Marp format with automatic HTML 
 
 Enables one-shot implementation mode for automated end-to-end feature development with issue creation, parallel implementation, and PR creation. Use this when you want Claude to autonomously implement a complete feature from planning through CI monitoring without manual intervention.
 
-### Adding New Commands
+## 🏗️ Component Details
 
-To add new commands:
+### Commands
+Individual Claude Code command templates that can be installed/uninstalled separately:
+- Each command is a standalone `.md` file with specific instructions
+- Install individual commands or all commands at once
+- Commands are immediately available in Claude Code after installation
 
-1. Create or modify files in the `claude-code/commands/` directory
-2. Commit and push your changes
-3. Team members can update by running `git pull`
+### Code Standards  
+Language-specific coding standards that can be managed individually:
+- **Go**: `go/CLAUDE.md` - Go formatting, naming conventions, error handling
+- **Python**: `python/CLAUDE.md` - PEP compliance, type hints, documentation
+- **Rust**: `rust/CLAUDE.md` - Memory safety, error handling, cargo conventions  
+- **TailwindCSS**: `tailwindcss/CLAUDE.md` - Utility-first CSS patterns
+- Install/uninstall standards per language
+- Automatically referenced by Claude when editing files
+
+### Hooks
+Individual automation hooks for different languages and tools:
+- **eslint**: JavaScript/TypeScript formatting with ESLint
+- **gofmt**: Go code formatting after edits
+- **golangci-lint**: Go linting and static analysis
+- **typescript**: TypeScript type checking after edits
+- Choose global (all projects) or local (current project) installation
+- Install/uninstall hooks individually based on your needs
+
+### Scripts
+Utility scripts added to your system PATH:
+- **init-ai-docs.py**: Initialize AI documentation in projects
+- **install-hooks.py**: Legacy hooks installer (still functional)
+- Scripts become globally accessible commands after installation
+
+## 📋 Requirements
+
+### System Requirements
+
+- **Operating System**: macOS, Linux, or Windows (with WSL)
+- **Python**: 3.8 or higher
+- **Shell**: bash, zsh, or fish
+- **Git**: For cloning and updating the repository
+
+### Claude Code Requirements
+
+- **Claude Code**: Latest version recommended
+- **Claude Account**: Active subscription for AI features
+- **Internet Connection**: Required for Claude API access
+
+### Optional Dependencies
+
+- **Go**: Required for `gofmt` and `golangci-lint` hook functionality
+- **Node.js/npm**: Required for `eslint` and `typescript` hooks
+- **Make**: Required for some project automation
 
 ## 🤝 Contributing
 
 1. Create a branch for your changes
 2. Add your commands, documentation, or scripts
-3. Create a pull request for review
-4. After approval, merge to main
-
-## 🆘 Support
-
-For questions or issues, please create an issue in this repository or reach out to the ethPandaOps team.
+3. Test your changes with the installer
+4. Update documentation as needed
+5. Create a pull request for review
+6. After approval your changes will be merged to main

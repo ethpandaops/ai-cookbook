@@ -1,0 +1,2 @@
+[console_scripts]
+ai-cookbook = pandaops_cookbook.main:main

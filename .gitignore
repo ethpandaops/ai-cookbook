@@ -22,3 +22,7 @@ Thumbs.db
 # Local environment files
 .env
 .env.local
+
+.venv/
+
+__pycache__/
