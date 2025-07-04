@@ -5,7 +5,6 @@ ai-cookbook - Interactive installer
 
 import sys
 import argparse
-import yaml
 
 def main():
     """Main entry point - supports interactive mode and recommended command"""

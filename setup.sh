@@ -34,7 +34,29 @@ fi
 
 print_info "Setting up ai-cookbook..."
 
-# No external dependencies needed
+# Check for uv
+if ! command -v uv >/dev/null 2>&1; then
+    print_error "uv is required but not installed"
+    print_info "Please install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    print_info "Or visit: https://docs.astral.sh/uv/getting-started/installation/"
+    exit 1
+fi
+
+# Create virtual environment and install dependencies
+print_info "Creating virtual environment with uv..."
+if [ ! -d ".venv" ]; then
+    uv venv || {
+        print_error "Failed to create virtual environment"
+        exit 1
+    }
+fi
+
+print_info "Installing Python dependencies..."
+uv pip install -r requirements.txt || {
+    print_error "Failed to install dependencies. Please install them manually: uv pip install -r requirements.txt"
+    exit 1
+}
+print_success "Dependencies installed in virtual environment"
 
 # Get the absolute path to this directory
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -43,13 +65,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_CONTENT="#!/bin/bash
 # ai-cookbook wrapper script
 
-# Find the best Python 3 executable
-if command -v python3 >/dev/null 2>&1; then
-    PYTHON_CMD=\"python3\"
-elif command -v python >/dev/null 2>&1 && python --version 2>&1 | grep -q \"Python 3\"; then
-    PYTHON_CMD=\"python\"
+# Use the virtual environment Python
+VENV_PYTHON=\"$REPO_ROOT/.venv/bin/python\"
+if [ -f \"\$VENV_PYTHON\" ]; then
+    PYTHON_CMD=\"\$VENV_PYTHON\"
 else
-    echo \"Error: Python 3 is required but not found\" >&2
+    echo \"Error: Virtual environment not found at $REPO_ROOT/.venv\" >&2
+    echo \"Please run setup.sh from the ai-cookbook directory\" >&2
     exit 1
 fi
 
