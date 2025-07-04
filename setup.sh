@@ -42,7 +42,19 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Create a simple wrapper script
 SCRIPT_CONTENT="#!/bin/bash
 # ai-cookbook wrapper script
-PYTHONPATH=\"$REPO_ROOT/src:\$PYTHONPATH\" python3 -m ai_cookbook.main \"\$@\"
+
+# Find the best Python 3 executable
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_CMD=\"python3\"
+elif command -v python >/dev/null 2>&1 && python --version 2>&1 | grep -q \"Python 3\"; then
+    PYTHON_CMD=\"python\"
+else
+    echo \"Error: Python 3 is required but not found\" >&2
+    exit 1
+fi
+
+export PYTHONPATH=\"$REPO_ROOT/src:\$PYTHONPATH\"
+exec \"\$PYTHON_CMD\" -m ai_cookbook.main \"\$@\"
 "
 
 # Detect user's shell and shell profile

@@ -9,7 +9,6 @@ __description__ = "Installation and management tools for Ethereum node operation
 # Package imports
 from . import config
 from . import installers
-from . import ui
 from . import utils
 
-__all__ = ["config", "installers", "ui", "utils"]
+__all__ = ["config", "installers", "utils"]
