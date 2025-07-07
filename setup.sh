@@ -92,26 +92,45 @@ else
     PROFILE_FILE="$HOME/.profile"
 fi
 
-# Create bin directory in home if it doesn't exist
-mkdir -p "$HOME/bin"
-
-# Write the wrapper script
-echo "$SCRIPT_CONTENT" > "$HOME/bin/ai-cookbook"
-chmod +x "$HOME/bin/ai-cookbook"
-
-# Add ~/bin to PATH if not already there
-if ! echo "$PATH" | grep -q "$HOME/bin"; then
-    echo "" >> "$PROFILE_FILE"
-    echo "# Added by ethpandaops/ai-cookbook installer" >> "$PROFILE_FILE"
-    echo "export PATH=\"\$HOME/bin:\$PATH\"" >> "$PROFILE_FILE"
-    print_info "Added ~/bin to PATH in $PROFILE_FILE"
-    print_info "You may need to restart your shell or run: source $PROFILE_FILE"
+# Determine installation directory based on platform
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    # On Linux, use ~/.local/bin
+    BIN_DIR="$HOME/.local/bin"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    # On macOS, check if ~/.local/bin is in PATH, otherwise use ~/bin
+    if echo "$PATH" | grep -q "$HOME/.local/bin"; then
+        BIN_DIR="$HOME/.local/bin"
+    else
+        BIN_DIR="$HOME/bin"
+    fi
+else
+    # Default to ~/bin for other systems
+    BIN_DIR="$HOME/bin"
 fi
 
-print_success "ai-cookbook installed successfully!"
+# Create bin directory if it doesn't exist
+mkdir -p "$BIN_DIR"
+
+# Write the wrapper script
+echo "$SCRIPT_CONTENT" > "$BIN_DIR/ai-cookbook"
+chmod +x "$BIN_DIR/ai-cookbook"
+
+# Check if the bin directory is already in PATH
+if ! echo "$PATH" | grep -q "$BIN_DIR"; then
+    # Add to PATH in shell profile
+    echo "" >> "$PROFILE_FILE"
+    echo "# Added by ethpandaops/ai-cookbook installer" >> "$PROFILE_FILE"
+    echo "export PATH=\"$BIN_DIR:\$PATH\"" >> "$PROFILE_FILE"
+    print_info "Added $BIN_DIR to PATH in $PROFILE_FILE"
+    print_info "You may need to restart your shell or run: source $PROFILE_FILE"
+else
+    print_info "$BIN_DIR is already in PATH"
+fi
+
+print_success "ai-cookbook installed successfully to $BIN_DIR!"
 echo ""
 print_info "You can now run: ai-cookbook"
-print_info "Or if PATH isn't updated yet: ~/bin/ai-cookbook"
+print_info "Or if PATH isn't updated yet: $BIN_DIR/ai-cookbook"
 echo ""
 print_info "The interactive installer provides the following options:"
 echo "  • Claude Commands - AI-assisted development commands"
