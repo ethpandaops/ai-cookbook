@@ -39,11 +39,22 @@ case "$tool_name" in
         if echo "$command" | grep -qE "(^|[;&|])\s*grep\s+" && \
            ! echo "$command" | grep -qE "(ripgrep|rg|ast-grep)"; then
             
-            # Extract file patterns from the command
-            # This handles common patterns like *.js, file.py, etc.
-            file_pattern=$(echo "$command" | grep -oE '[*]?\.[a-zA-Z0-9]+' | head -1)
-            if [ -n "$file_pattern" ]; then
-                include_pattern="$file_pattern"
+            # Extract file patterns from the command using enhanced pattern extraction
+            # Function to extract multiple patterns and handle complex cases
+            extract_file_patterns() {
+                local cmd="$1"
+                # Remove the grep command and its flags to focus on file patterns
+                # Handle patterns like: *.js, "*.{ts,tsx}", 'src/**/*.py', etc.
+                echo "$cmd" | sed -E 's/^[^[:space:]]*grep[[:space:]]+(-[[:space:]]*[a-zA-Z]*[[:space:]]*)*("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)[[:space:]]*//' | \
+                    grep -oE '(["'"'"']?[^"'"'"'\s]*\*?\.[a-zA-Z0-9\{\},]+["'"'"']?|["'"'"'][^"'"'"']+["'"'"'])' | tr -d '"' | tr -d "'"
+            }
+            
+            # Get all file patterns
+            file_patterns=$(extract_file_patterns "$command")
+            
+            if [ -n "$file_patterns" ]; then
+                # Use the first pattern for checking
+                include_pattern=$(echo "$file_patterns" | head -1)
                 should_check=true
             else
                 # If no specific pattern found, check if any files are mentioned
@@ -63,66 +74,9 @@ if [ "$should_check" = false ]; then
     exit 0
 fi
 
-# Embedded code extensions that ast-grep supports
-code_extensions="
-.bash
-.bats
-.cgi
-.command
-.env
-.fcgi
-.ksh
-.sh
-.sh.in
-.tmux
-.tool
-.zsh
-.c
-.h
-.cc
-.hpp
-.cpp
-.c++
-.hh
-.cxx
-.cu
-.ino
-.cs
-.css
-.ex
-.exs
-.go
-.hs
-.html
-.htm
-.xhtml
-.java
-.cjs
-.js
-.mjs
-.jsx
-.kt
-.ktm
-.kts
-.lua
-.php
-.py
-.py3
-.pyi
-.bzl
-.rb
-.rbw
-.gemspec
-.rs
-.scala
-.sc
-.sbt
-.swift
-.ts
-.cts
-.mts
-.tsx
-"
+# Load extensions from config
+extensions_file="$(dirname "$0")/extensions.json"
+code_extensions=$(jq -r '.supported_extensions | to_entries[] | .value[]' "$extensions_file" 2>/dev/null | sed 's/^/./')
 
 # Check if the include pattern contains any code file extension
 is_code_file=false
@@ -155,12 +109,95 @@ else
     done <<< "$code_extensions"
 fi
 
+# Function to suggest ast-grep patterns based on grep pattern and file type
+suggest_ast_grep_pattern() {
+    local grep_pattern="$1"
+    local file_type="$2"
+    local extensions_file="$(dirname "$0")/extensions.json"
+    local patterns_file="$(dirname "$0")/patterns.json"
+    
+    # Try to extract the search pattern from the grep command
+    local search_pattern=$(echo "$command" | sed -n 's/.*grep[[:space:]]\+\(-[[:space:]]*[a-zA-Z]*[[:space:]]*\)*"\?\([^"]*\)"\?.*/\2/p')
+    
+    # First, map extension to language code
+    local lang_code=""
+    if [ -f "$extensions_file" ]; then
+        lang_code=$(jq -r --arg ext "${file_type#.}" '
+            .supported_extensions | to_entries[] | 
+            select(.value[] | . == $ext) | 
+            .key
+        ' "$extensions_file" 2>/dev/null | head -1)
+    fi
+    
+    # If we couldn't find a language code, bail out
+    if [ -z "$lang_code" ]; then
+        echo "   Try: ast-grep --pattern 'your_pattern_here' --lang <language>" >&2
+        echo "   Learn more: https://ast-grep.github.io/guide/pattern-syntax.html" >&2
+        return
+    fi
+    
+    # Load patterns from JSON file
+    if [ -f "$patterns_file" ]; then
+        # Use jq to get pattern suggestions based on language code and search pattern
+        # First try pattern detection, then fall back to ALL general examples
+        local lang_info=$(jq -r --arg lang "$lang_code" --arg pattern "$search_pattern" '
+            .[$lang] |
+            if . then
+                if .pattern_detection then
+                    # Try pattern detection first
+                    ((.pattern_detection[] | 
+                      select(.regex as $rx | $pattern | test($rx)) |
+                      .suggestion + " --lang " + $lang + " # " + .description) 
+                    // 
+                    # Fall back to ALL general examples
+                    (.general_examples[] | 
+                     .pattern + " --lang " + $lang + " # " + .description))
+                else
+                    # Only general examples available - show ALL
+                    .general_examples[] | 
+                    .pattern + " --lang " + $lang + " # " + .description
+                end
+            else
+                empty
+            end
+        ' "$patterns_file" 2>/dev/null)
+        
+        if [ -n "$lang_info" ]; then
+            echo "   Pattern suggestions for $file_type:" >&2
+            echo "$lang_info" | while IFS= read -r suggestion; do
+                echo "   - $suggestion" >&2
+            done
+        else
+            # Fallback to generic suggestion if no patterns found
+            echo "   Try: ast-grep --pattern 'your_pattern_here' --lang $lang_code" >&2
+        fi
+    else
+        # Fallback if patterns.json is missing
+        echo "   Try: ast-grep --pattern 'your_pattern_here' --lang $lang_code" >&2
+    fi
+    
+    echo "   Learn more: https://ast-grep.github.io/guide/pattern-syntax.html" >&2
+}
+
 # If searching in code files, provide gentle feedback
 if [ "$is_code_file" = true ]; then
     echo "" >&2
     echo "💡 Note for future Claude: grep detected while searching in code files." >&2
     echo "   ast-grep is installed and understands code syntax better than text matching." >&2
     echo "   Consider using 'ast-grep --pattern ...' for more precise code searches in the future." >&2
+    
+    # Determine file type from include pattern if possible
+    detected_file_type=""
+    if [ "$include_pattern" != "unknown_files" ]; then
+        # Extract extension from pattern
+        detected_file_type=$(echo "$include_pattern" | grep -oE '\.[a-zA-Z0-9]+' | head -1)
+    fi
+    
+    # Suggest patterns if we detected a file type
+    if [ -n "$detected_file_type" ]; then
+        suggest_ast_grep_pattern "$command" "$detected_file_type"
+    fi
+    
     echo "" >&2
     # Exit with code 2 so Claude sees the feedback (PostToolUse behavior)
     exit 2
