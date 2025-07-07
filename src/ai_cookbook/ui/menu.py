@@ -114,7 +114,7 @@ class InteractiveMenu:
         # Render help text at bottom
         help_row = rows - 2
         self.terminal.move_cursor(help_row, 3)
-        help_text = "↑↓: Navigate | Enter: Select | Tab: Toggle details | q: Quit"
+        help_text = "↑↓: Navigate | Enter/→: Select | Tab: Toggle details | q/←: Quit"
         if len(help_text) < cols - 6:
             self.terminal.write(help_text)
         
@@ -130,11 +130,11 @@ class InteractiveMenu:
             self.move_selection(-1)
         elif key == 'DOWN':
             self.move_selection(1)
-        elif key == 'ENTER':
+        elif key == 'ENTER' or key == 'RIGHT':
             return 'select'
         elif key == 'TAB':
             self.toggle_details()
-        elif key.lower() == 'q':
+        elif key.lower() == 'q' or key == 'LEFT':
             return 'quit'
         elif key == 'CTRL+C':
             return 'quit'

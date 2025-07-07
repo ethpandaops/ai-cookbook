@@ -39,7 +39,7 @@ def main():
         print("  ai-cookbook --version    Show version")
         print("  ai-cookbook --yes        Skip confirmation prompts")
         print()
-        print("Interactive mode: Use arrow keys to navigate, Enter to select, 'q' to quit.")
+        print("Interactive mode: Use arrow keys to navigate, Enter/→ to select, q/← to quit.")
         return
     
     # Handle recommended command
