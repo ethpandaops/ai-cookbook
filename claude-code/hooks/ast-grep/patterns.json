@@ -1,0 +1,1303 @@
+{
+  "bash": {
+    "pattern_detection": [
+      {
+        "regex": "^([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(\\)\\s*\\{",
+        "suggestion": "ast-grep --pattern '$FUNC() { $$$BODY }'",
+        "description": "Matches Bash function declarations with the pattern: function_name() { ... }"
+      },
+      {
+        "regex": "\\$\\{?([a-zA-Z_][a-zA-Z0-9_]*)\\}?",
+        "suggestion": "ast-grep --pattern '$VAR'",
+        "description": "Matches Bash variable references like $VAR or ${VAR}"
+      },
+      {
+        "regex": "^if\\s+\\[\\[?",
+        "suggestion": "ast-grep --pattern 'if $$$CONDITION; then $$$BODY fi'",
+        "description": "Matches if statements with test conditions using [ or [["
+      },
+      {
+        "regex": "for\\s+\\w+\\s+in",
+        "suggestion": "ast-grep --pattern 'for $VAR in $$$LIST; do $$$BODY done'",
+        "description": "Matches for-in loops iterating over lists"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '$FUNC() { $$$BODY }'",
+        "description": "Match function declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern '$VAR=\"$VALUE\"'",
+        "description": "Match variable assignments"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if $$$CONDITION; then $$$BODY fi'",
+        "description": "Match if statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'case $VAR in $$$CASES esac'",
+        "description": "Match case statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'echo $$$ARGS'",
+        "description": "Match echo commands"
+      }
+    ]
+  },
+  "c": {
+    "pattern_detection": [
+      {
+        "regex": "^(int|void|char|float|double|struct|unsigned|long)\\s+\\**\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+        "suggestion": "ast-grep --pattern '$TYPE $FUNC($$$PARAMS) { $$$BODY }' --kind function_definition",
+        "description": "Matches C function definitions with return type and parameters"
+      },
+      {
+        "regex": "malloc\\s*\\(",
+        "suggestion": "ast-grep --pattern 'malloc($SIZE)'",
+        "description": "Matches malloc memory allocation calls"
+      },
+      {
+        "regex": "\\*\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+        "suggestion": "ast-grep --pattern '*$PTR'",
+        "description": "Matches pointer variable declarations or dereferences"
+      },
+      {
+        "regex": "struct\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\{",
+        "suggestion": "ast-grep --pattern 'struct $NAME { $$$FIELDS };'",
+        "description": "Matches struct type definitions"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '$M($$$)' --kind call_expression",
+        "description": "Match function calls (avoids macro ambiguity)"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if ($CONDITION) { $$$THEN } else { $$$ELSE }'",
+        "description": "Match if-else statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for ($INIT; $CONDITION; $UPDATE) { $$$BODY }'",
+        "description": "Match for loops"
+      },
+      {
+        "pattern": "ast-grep --pattern 'while ($CONDITION) { $$$BODY }'",
+        "description": "Match while loops"
+      },
+      {
+        "pattern": "ast-grep --pattern '#include <$HEADER>'",
+        "description": "Match include directives"
+      },
+      {
+        "pattern": "ast-grep --pattern '$R.$METHOD($$$ARGS)'",
+        "description": "Match struct method-style calls"
+      },
+      {
+        "pattern": "ast-grep --pattern '$A == $B' --inside parenthesized_expression --inside if_statement",
+        "description": "Match equality comparisons in if statements"
+      }
+    ]
+  },
+  "cpp": {
+    "pattern_detection": [
+      {
+        "regex": "^class\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        "suggestion": "ast-grep --pattern 'class $NAME { $$$MEMBERS };'",
+        "description": "Matches C++ class declarations"
+      },
+      {
+        "regex": "std::[a-zA-Z_][a-zA-Z0-9_]*",
+        "suggestion": "ast-grep --pattern 'std::$TYPE'",
+        "description": "Matches standard library namespace usage"
+      },
+      {
+        "regex": "new\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        "suggestion": "ast-grep --pattern 'new $TYPE($$$ARGS)'",
+        "description": "Matches dynamic memory allocation with new"
+      },
+      {
+        "regex": "template\\s*<",
+        "suggestion": "ast-grep --pattern 'template<$$$PARAMS> $$$DECL'",
+        "description": "Matches template declarations"
+      },
+      {
+        "regex": "(sprintf|fprintf)\\s*\\(",
+        "suggestion": "ast-grep --pattern '$PRINTF($S, $VAR)'",
+        "description": "Matches potentially vulnerable format string calls"
+      },
+      {
+        "regex": "struct\\s+\\w+\\s*:\\s*\\w+",
+        "suggestion": "ast-grep --pattern 'struct $SOMETHING: $INHERITS { $$$BODY; }'",
+        "description": "Matches struct inheritance"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'class $NAME { $$$MEMBERS };'",
+        "description": "Match class definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern '$TYPE $METHOD($$$PARAMS) { $$$BODY }'",
+        "description": "Match method definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'namespace $NS { $$$CONTENT }'",
+        "description": "Match namespace declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'auto $VAR = $EXPR'",
+        "description": "Match auto variable declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for (auto $VAR : $CONTAINER) { $$$BODY }'",
+        "description": "Match range-based for loops"
+      }
+    ]
+  },
+  "cs": {
+    "pattern_detection": [
+      {
+        "regex": "^(public|private|protected|internal)\\s+(class|interface)",
+        "suggestion": "ast-grep --pattern '$ACCESS class $NAME { $$$MEMBERS }'",
+        "description": "Matches class or interface declarations with access modifiers"
+      },
+      {
+        "regex": "async\\s+(Task|void|Task<)",
+        "suggestion": "ast-grep --pattern 'async $RETURN $METHOD($$$PARAMS) { $$$BODY }'",
+        "description": "Matches async method declarations"
+      },
+      {
+        "regex": "\\[([A-Z][a-zA-Z0-9]*)\\]",
+        "suggestion": "ast-grep --pattern '[$ATTRIBUTE($$$ARGS)] $$$DECORATED'",
+        "description": "Matches attribute decorations on classes, methods, or properties"
+      },
+      {
+        "regex": "using\\s+[A-Z]",
+        "suggestion": "ast-grep --pattern 'using $NAMESPACE;'",
+        "description": "Matches using namespace directives"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'public class $NAME { $$$MEMBERS }'",
+        "description": "Match public class declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern '$ACCESS $TYPE $PROPERTY { get; set; }'",
+        "description": "Match auto-implemented properties"
+      },
+      {
+        "pattern": "ast-grep --pattern 'foreach (var $ITEM in $COLLECTION) { $$$BODY }'",
+        "description": "Match foreach loops"
+      },
+      {
+        "pattern": "ast-grep --pattern 'var $VAR = $EXPR'",
+        "description": "Match var declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'await $ASYNC_CALL($$$ARGS)'",
+        "description": "Match await expressions"
+      }
+    ]
+  },
+  "css": {
+    "pattern_detection": [
+      {
+        "regex": "\\.([-a-zA-Z][a-zA-Z0-9-]*)",
+        "suggestion": "ast-grep --pattern '.$CLASS { $$$RULES }'",
+        "description": "Matches CSS class selectors"
+      },
+      {
+        "regex": "#([-a-zA-Z][a-zA-Z0-9-]*)",
+        "suggestion": "ast-grep --pattern '#$ID { $$$RULES }'",
+        "description": "Matches CSS ID selectors"
+      },
+      {
+        "regex": "@media\\s+",
+        "suggestion": "ast-grep --pattern '@media $QUERY { $$$RULES }'",
+        "description": "Matches media query declarations"
+      },
+      {
+        "regex": "^([a-zA-Z]+)\\s*\\{",
+        "suggestion": "ast-grep --pattern '$ELEMENT { $$$RULES }'",
+        "description": "Matches element type selectors"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '.$CLASS { $$$RULES }'",
+        "description": "Match class selectors"
+      },
+      {
+        "pattern": "ast-grep --pattern '$SELECTOR { $PROPERTY: $VALUE; }'",
+        "description": "Match CSS rules"
+      },
+      {
+        "pattern": "ast-grep --pattern '@media $QUERY { $$$RULES }'",
+        "description": "Match media queries"
+      },
+      {
+        "pattern": "ast-grep --pattern '$SELECTOR:$PSEUDO { $$$RULES }'",
+        "description": "Match pseudo-class selectors"
+      },
+      {
+        "pattern": "ast-grep --pattern '@keyframes $NAME { $$$FRAMES }'",
+        "description": "Match keyframe animations"
+      }
+    ]
+  },
+  "ex": {
+    "pattern_detection": [
+      {
+        "regex": "^def\\s+([a-zA-Z_][a-zA-Z0-9_?!]*)",
+        "suggestion": "ast-grep --pattern 'def $FUNC($$$PARAMS) do $$$BODY end'",
+        "description": "Matches Elixir function definitions"
+      },
+      {
+        "regex": "^defmodule\\s+",
+        "suggestion": "ast-grep --pattern 'defmodule $MODULE do $$$BODY end'",
+        "description": "Matches module definitions"
+      },
+      {
+        "regex": "\\|>",
+        "suggestion": "ast-grep --pattern '$EXPR |> $FUNC($$$ARGS)'",
+        "description": "Matches pipe operator usage for function chaining"
+      },
+      {
+        "regex": "case\\s+.+\\s+do",
+        "suggestion": "ast-grep --pattern 'case $EXPR do $$$CLAUSES end'",
+        "description": "Matches case expressions"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'def $FUNC($$$PARAMS) do $$$BODY end'",
+        "description": "Match function definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'defmodule $MODULE do $$$BODY end'",
+        "description": "Match module definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern '$EXPR |> $FUNC($$$ARGS)'",
+        "description": "Match pipe operations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'with $$$CLAUSES do $$$BODY end'",
+        "description": "Match with expressions"
+      },
+      {
+        "pattern": "ast-grep --pattern '@$ATTRIBUTE $VALUE'",
+        "description": "Match module attributes"
+      }
+    ]
+  },
+  "go": {
+    "pattern_detection": [
+      {
+        "regex": "^func\\s+(\\(.*\\)\\s*)?([a-zA-Z_][a-zA-Z0-9_]*)",
+        "suggestion": "ast-grep --pattern 'func $FUNC($$$PARAMS) $$$RETURN { $$$BODY }'",
+        "description": "Matches Go function declarations with optional receiver"
+      },
+      {
+        "regex": "if\\s+err\\s*!=\\s*nil",
+        "suggestion": "ast-grep --pattern 'if err != nil { $$$BODY }'",
+        "description": "Matches Go's idiomatic error checking pattern"
+      },
+      {
+        "regex": "^type\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s+struct",
+        "suggestion": "ast-grep --pattern 'type $NAME struct { $$$FIELDS }'",
+        "description": "Matches struct type definitions"
+      },
+      {
+        "regex": "defer\\s+",
+        "suggestion": "ast-grep --pattern 'defer $FUNC($$$ARGS)'",
+        "description": "Matches defer statements for cleanup"
+      },
+      {
+        "regex": ":=",
+        "suggestion": "ast-grep --pattern '$VAR := $EXPR'",
+        "description": "Matches short variable declarations"
+      },
+      {
+        "regex": "^func\\s+Test",
+        "suggestion": "ast-grep --pattern 'func Test$NAME(t *testing.T) { $$$ }' --kind function_declaration",
+        "description": "Matches Go test functions"
+      },
+      {
+        "regex": "fmt\\.Print",
+        "suggestion": "ast-grep --pattern 'fmt.Println($$$)' --kind call_expression",
+        "description": "Matches fmt.Print calls"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'func $FUNC($$$PARAMS) $$$RETURN { $$$BODY }'",
+        "description": "Match function declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if $CONDITION { $$$THEN } else { $$$ELSE }'",
+        "description": "Match if-else statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for $INIT; $CONDITION; $POST { $$$BODY }'",
+        "description": "Match for loops"
+      },
+      {
+        "pattern": "ast-grep --pattern 'type $NAME interface { $$$METHODS }'",
+        "description": "Match interface definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'go $FUNC($$$ARGS)'",
+        "description": "Match goroutine launches"
+      },
+      {
+        "pattern": "ast-grep --pattern 'import $PACKAGE'",
+        "description": "Match import statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'func ($RECEIVER) $NAME($$$PARAMS) $$$RETURN { $$$ }'",
+        "description": "Match method declarations"
+      }
+    ]
+  },
+  "hs": {
+    "pattern_detection": [
+      {
+        "regex": "^([a-z][a-zA-Z0-9_']*)\\s*::",
+        "suggestion": "ast-grep --pattern '$FUNC :: $TYPE'",
+        "description": "Matches Haskell type signatures"
+      },
+      {
+        "regex": "^data\\s+",
+        "suggestion": "ast-grep --pattern 'data $TYPE = $$$CONSTRUCTORS'",
+        "description": "Matches algebraic data type definitions"
+      },
+      {
+        "regex": "case\\s+.+\\s+of",
+        "suggestion": "ast-grep --pattern 'case $EXPR of $$$PATTERNS'",
+        "description": "Matches case expressions for pattern matching"
+      },
+      {
+        "regex": "^import\\s+",
+        "suggestion": "ast-grep --pattern 'import $MODULE'",
+        "description": "Matches import statements"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '$FUNC :: $TYPE'",
+        "description": "Match type signatures"
+      },
+      {
+        "pattern": "ast-grep --pattern '$FUNC $$$PARAMS = $BODY'",
+        "description": "Match function definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'data $TYPE = $$$CONSTRUCTORS'",
+        "description": "Match data type definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'instance $CLASS $TYPE where $$$DEFS'",
+        "description": "Match typeclass instances"
+      },
+      {
+        "pattern": "ast-grep --pattern 'let $$$BINDINGS in $EXPR'",
+        "description": "Match let expressions"
+      }
+    ]
+  },
+  "html": {
+    "pattern_detection": [
+      {
+        "regex": "<([a-zA-Z][a-zA-Z0-9]*)(?:\\s|>)",
+        "suggestion": "ast-grep --pattern '<$TAG $$$ATTRS>$$$CONTENT</$TAG>'",
+        "description": "Matches HTML opening tags with optional attributes"
+      },
+      {
+        "regex": "class=\"([^\"]+)\"",
+        "suggestion": "ast-grep --pattern '<$TAG class=\"$CLASSES\" $$$ATTRS>$$$CONTENT</$TAG>'",
+        "description": "Matches HTML elements with class attributes"
+      },
+      {
+        "regex": "id=\"([^\"]+)\"",
+        "suggestion": "ast-grep --pattern '<$TAG id=\"$ID\" $$$ATTRS>$$$CONTENT</$TAG>'",
+        "description": "Matches HTML elements with id attributes"
+      },
+      {
+        "regex": "<(img|input|br|hr|meta|link)",
+        "suggestion": "ast-grep --pattern '<$TAG $$$ATTRS />'",
+        "description": "Matches self-closing HTML tags"
+      },
+      {
+        "regex": ":visible",
+        "suggestion": "ast-grep --pattern '<$TAG :visible=\"$VALUE\" $$$>' --kind attribute_name",
+        "description": "Matches Vue :visible attribute (deprecated)"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '<$TAG $$$ATTRS>$$$CONTENT</$TAG>'",
+        "description": "Match paired HTML tags"
+      },
+      {
+        "pattern": "ast-grep --pattern '<div class=\"$CLASS\">$$$CONTENT</div>'",
+        "description": "Match div elements with classes"
+      },
+      {
+        "pattern": "ast-grep --pattern '<a href=\"$URL\">$$$TEXT</a>'",
+        "description": "Match anchor links"
+      },
+      {
+        "pattern": "ast-grep --pattern '<$TAG $$$ATTRS />'",
+        "description": "Match self-closing tags"
+      },
+      {
+        "pattern": "ast-grep --pattern '<!-- $$$COMMENT -->'",
+        "description": "Match HTML comments"
+      },
+      {
+        "pattern": "ast-grep --pattern '$T' --kind text",
+        "description": "Match text content (for i18n extraction)"
+      }
+    ]
+  },
+  "java": {
+    "pattern_detection": [
+      {
+        "regex": "^(public|private|protected)\\s+(class|interface)",
+        "suggestion": "ast-grep --pattern '$ACCESS class $NAME { $$$BODY }'",
+        "description": "Matches Java class or interface declarations with access modifiers"
+      },
+      {
+        "regex": "try\\s*\\{",
+        "suggestion": "ast-grep --pattern 'try { $$$TRY } catch ($EXCEPTION $VAR) { $$$CATCH }'",
+        "description": "Matches try-catch blocks for exception handling"
+      },
+      {
+        "regex": "@([A-Z][a-zA-Z0-9]*)",
+        "suggestion": "ast-grep --pattern '@$ANNOTATION($$$PARAMS) $$$ANNOTATED'",
+        "description": "Matches Java annotations on classes, methods, or fields"
+      },
+      {
+        "regex": "\\.([a-zA-Z][a-zA-Z0-9]*)\\s*\\(",
+        "suggestion": "ast-grep --pattern '$OBJECT.$METHOD($$$ARGS)'",
+        "description": "Matches method calls on objects"
+      },
+      {
+        "regex": "^import\\s+",
+        "suggestion": "ast-grep --pattern 'import $PACKAGE.$CLASS;'",
+        "description": "Matches import statements"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'public class $NAME { $$$BODY }'",
+        "description": "Match public class declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern '$ACCESS $TYPE $METHOD($$$PARAMS) { $$$BODY }'",
+        "description": "Match method declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for ($TYPE $VAR : $COLLECTION) { $$$BODY }'",
+        "description": "Match enhanced for loops"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if ($CONDITION) { $$$THEN } else { $$$ELSE }'",
+        "description": "Match if-else statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'new $TYPE($$$ARGS)'",
+        "description": "Match object instantiation"
+      },
+      {
+        "pattern": "ast-grep --pattern '$TYPE $VAR = $INIT;' --kind local_variable_declaration",
+        "description": "Match local variable declarations"
+      }
+    ]
+  },
+  "js": {
+    "pattern_detection": [
+      {
+        "regex": "([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\(",
+        "suggestion": "ast-grep --pattern '$FUNC($$$ARGS)'",
+        "description": "Matches function calls"
+      },
+      {
+        "regex": "^import\\s+",
+        "suggestion": "ast-grep --pattern 'import $$$IMPORTS from $MODULE'",
+        "description": "Matches ES6 import statements"
+      },
+      {
+        "regex": "^const\\s+",
+        "suggestion": "ast-grep --pattern 'const $VAR = $VALUE'",
+        "description": "Matches const variable declarations"
+      },
+      {
+        "regex": "=>",
+        "suggestion": "ast-grep --pattern '($$$PARAMS) => $$$BODY'",
+        "description": "Matches arrow function expressions"
+      },
+      {
+        "regex": "^function\\s+",
+        "suggestion": "ast-grep --pattern 'function $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Matches function declarations"
+      },
+      {
+        "regex": "<([A-Z][a-zA-Z0-9]*)",
+        "suggestion": "ast-grep --pattern '<$COMPONENT $$$PROPS>$$$CHILDREN</$COMPONENT>'",
+        "description": "Matches JSX component usage"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '$OBJECT.$METHOD($$$ARGS)'",
+        "description": "Match method calls"
+      },
+      {
+        "pattern": "ast-grep --pattern 'const $VAR = ($$$PARAMS) => $$$BODY'",
+        "description": "Match arrow function assignments"
+      },
+      {
+        "pattern": "ast-grep --pattern 'async function $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Match async functions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if ($CONDITION) { $$$THEN } else { $$$ELSE }'",
+        "description": "Match if-else statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'try { $$$TRY } catch ($ERROR) { $$$CATCH }'",
+        "description": "Match try-catch blocks"
+      }
+    ]
+  },
+  "json": {
+    "pattern_detection": [
+      {
+        "regex": "\"([a-zA-Z_][a-zA-Z0-9_-]*)\"\\s*:",
+        "suggestion": "ast-grep --pattern '\"$KEY\": $VALUE'",
+        "description": "Matches JSON key-value pairs"
+      },
+      {
+        "regex": "\\[",
+        "suggestion": "ast-grep --pattern '[$$$ITEMS]'",
+        "description": "Matches JSON arrays"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '\"$KEY\": $VALUE'",
+        "description": "Match key-value pairs"
+      },
+      {
+        "pattern": "ast-grep --pattern '{ $$$PAIRS }'",
+        "description": "Match JSON objects"
+      },
+      {
+        "pattern": "ast-grep --pattern '[$$$ITEMS]'",
+        "description": "Match JSON arrays"
+      },
+      {
+        "pattern": "ast-grep --pattern '\"$KEY\": { $$$NESTED }'",
+        "description": "Match nested objects"
+      }
+    ]
+  },
+  "kt": {
+    "pattern_detection": [
+      {
+        "regex": "^fun\\s+",
+        "suggestion": "ast-grep --pattern 'fun $NAME($$$PARAMS): $TYPE { $$$BODY }'",
+        "description": "Matches Kotlin function declarations"
+      },
+      {
+        "regex": "^class\\s+",
+        "suggestion": "ast-grep --pattern 'class $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Matches class declarations with optional primary constructor"
+      },
+      {
+        "regex": "when\\s*\\(",
+        "suggestion": "ast-grep --pattern 'when ($EXPR) { $$$BRANCHES }'",
+        "description": "Matches when expressions (Kotlin's switch)"
+      },
+      {
+        "regex": "^data\\s+class",
+        "suggestion": "ast-grep --pattern 'data class $NAME($$$PROPERTIES)'",
+        "description": "Matches data class declarations"
+      },
+      {
+        "regex": "^import\\s+",
+        "suggestion": "ast-grep --pattern 'import $PATH'",
+        "description": "Matches import statements"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'fun $NAME($$$PARAMS): $TYPE { $$$BODY }'",
+        "description": "Match function declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'class $NAME { $$$MEMBERS }'",
+        "description": "Match class declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'val $NAME: $TYPE = $VALUE'",
+        "description": "Match immutable variable declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if ($CONDITION) $$$THEN else $$$ELSE'",
+        "description": "Match if expressions"
+      },
+      {
+        "pattern": "ast-grep --pattern '$OBJECT?.let { $$$BODY }'",
+        "description": "Match safe call with let"
+      }
+    ]
+  },
+  "lua": {
+    "pattern_detection": [
+      {
+        "regex": "^function\\s+",
+        "suggestion": "ast-grep --pattern 'function $NAME($$$PARAMS) $$$BODY end'",
+        "description": "Matches Lua function definitions"
+      },
+      {
+        "regex": "^local\\s+function",
+        "suggestion": "ast-grep --pattern 'local function $NAME($$$PARAMS) $$$BODY end'",
+        "description": "Matches local function definitions"
+      },
+      {
+        "regex": "^local\\s+",
+        "suggestion": "ast-grep --pattern 'local $VAR = $VALUE'",
+        "description": "Matches local variable declarations"
+      },
+      {
+        "regex": "require\\s*[\\(\"']",
+        "suggestion": "ast-grep --pattern 'require($MODULE)'",
+        "description": "Matches module imports"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'function $NAME($$$PARAMS) $$$BODY end'",
+        "description": "Match function definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if $CONDITION then $$$THEN else $$$ELSE end'",
+        "description": "Match if statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for $VAR = $START, $END do $$$BODY end'",
+        "description": "Match numeric for loops"
+      },
+      {
+        "pattern": "ast-grep --pattern 'while $CONDITION do $$$BODY end'",
+        "description": "Match while loops"
+      },
+      {
+        "pattern": "ast-grep --pattern '$TABLE.$KEY = $VALUE'",
+        "description": "Match table field assignments"
+      }
+    ]
+  },
+  "php": {
+    "pattern_detection": [
+      {
+        "regex": "^function\\s+",
+        "suggestion": "ast-grep --pattern 'function $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Matches PHP function declarations"
+      },
+      {
+        "regex": "^class\\s+",
+        "suggestion": "ast-grep --pattern 'class $NAME { $$$BODY }'",
+        "description": "Matches class declarations"
+      },
+      {
+        "regex": "\\$([a-zA-Z_][a-zA-Z0-9_]*)",
+        "suggestion": "ast-grep --pattern '$VAR'",
+        "description": "Matches PHP variable references"
+      },
+      {
+        "regex": "->([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\(",
+        "suggestion": "ast-grep --pattern '$OBJECT->$METHOD($$$ARGS)'",
+        "description": "Matches method calls on objects"
+      },
+      {
+        "regex": "^namespace\\s+",
+        "suggestion": "ast-grep --pattern 'namespace $NS;'",
+        "description": "Matches namespace declarations"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'function $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Match function declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'class $NAME extends $PARENT { $$$BODY }'",
+        "description": "Match class inheritance"
+      },
+      {
+        "pattern": "ast-grep --pattern 'public function $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Match public methods"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if ($CONDITION) { $$$THEN } else { $$$ELSE }'",
+        "description": "Match if-else statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'foreach ($ARRAY as $VALUE) { $$$BODY }'",
+        "description": "Match foreach loops"
+      }
+    ]
+  },
+  "py": {
+    "pattern_detection": [
+      {
+        "regex": "^def\\s+",
+        "suggestion": "ast-grep --pattern 'def $FUNC($$$PARAMS): $$$'",
+        "description": "Matches Python function definitions"
+      },
+      {
+        "regex": "^class\\s+",
+        "suggestion": "ast-grep --pattern 'class $NAME($$$BASES): $$$'",
+        "description": "Matches class definitions with optional base classes"
+      },
+      {
+        "regex": "^import\\s+",
+        "suggestion": "ast-grep --pattern 'import $MODULE'",
+        "description": "Matches simple import statements"
+      },
+      {
+        "regex": "^from\\s+",
+        "suggestion": "ast-grep --pattern 'from $MODULE import $$$NAMES'",
+        "description": "Matches from-import statements"
+      },
+      {
+        "regex": "@([a-zA-Z_][a-zA-Z0-9_]*)",
+        "suggestion": "ast-grep --pattern '@$DECORATOR def $FUNC($$$PARAMS): $$$'",
+        "description": "Matches decorated function definitions"
+      },
+      {
+        "regex": "^async\\s+def",
+        "suggestion": "ast-grep --pattern 'async def $FUNC($$$PARAMS): $$$'",
+        "description": "Matches async function definitions"
+      },
+      {
+        "regex": "\\s*==\\s*None",
+        "suggestion": "ast-grep --pattern '$VAR == None'",
+        "description": "Matches None comparisons (consider 'is None' instead)"
+      },
+      {
+        "regex": "isinstance\\s*\\(",
+        "suggestion": "ast-grep --pattern 'isinstance($OBJ, $TYPE)'",
+        "description": "Matches isinstance type checks"
+      },
+      {
+        "regex": "\\[.*for.*in.*\\]",
+        "suggestion": "ast-grep --pattern '[$EXPR for $VAR in $ITER]'",
+        "description": "Matches list comprehensions"
+      },
+      {
+        "regex": "lambda\\s+",
+        "suggestion": "ast-grep --pattern 'lambda $$$PARAMS: $EXPR'",
+        "description": "Matches lambda functions"
+      },
+      {
+        "regex": "raise\\s+",
+        "suggestion": "ast-grep --pattern 'raise $EXCEPTION'",
+        "description": "Matches raise statements"
+      },
+      {
+        "regex": "yield\\s+",
+        "suggestion": "ast-grep --pattern 'yield $EXPR'",
+        "description": "Matches yield expressions"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'def $FUNC($$$PARAMS): $$$'",
+        "description": "Match function definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'class $NAME: $$$'",
+        "description": "Match class definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if $CONDITION: $$$'",
+        "description": "Match if statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for $VAR in $ITERABLE: $$$'",
+        "description": "Match for loops"
+      },
+      {
+        "pattern": "ast-grep --pattern 'with $EXPR as $VAR: $$$'",
+        "description": "Match with statements"
+      },
+      {
+        "pattern": "ast-grep --pattern '$VAR = $VALUE'",
+        "description": "Match variable assignments"
+      },
+      {
+        "pattern": "ast-grep --pattern 'try: $$$ except $EXCEPTION: $$$'",
+        "description": "Match try-except blocks"
+      },
+      {
+        "pattern": "ast-grep --pattern 'return $$$'",
+        "description": "Match return statements"
+      },
+      {
+        "pattern": "ast-grep --pattern '$FUNC($$$ARGS)'",
+        "description": "Match function calls"
+      },
+      {
+        "pattern": "ast-grep --pattern '[$$$]'",
+        "description": "Match list literals"
+      }
+    ]
+  },
+  "rb": {
+    "pattern_detection": [
+      {
+        "regex": "^def\\s+",
+        "suggestion": "ast-grep --pattern 'def $METHOD($$$PARAMS) $$$BODY end'",
+        "description": "Matches Ruby method definitions"
+      },
+      {
+        "regex": "^class\\s+",
+        "suggestion": "ast-grep --pattern 'class $NAME < $PARENT $$$BODY end'",
+        "description": "Matches class definitions with inheritance"
+      },
+      {
+        "regex": "\\.each\\s*[\\{\\|]",
+        "suggestion": "ast-grep --pattern '$ENUMERABLE.each { |$VAR| $$$BODY }'",
+        "description": "Matches each iterator blocks"
+      },
+      {
+        "regex": "require\\s+['\"]",
+        "suggestion": "ast-grep --pattern 'require $MODULE'",
+        "description": "Matches require statements"
+      },
+      {
+        "regex": "attr_(reader|writer|accessor)",
+        "suggestion": "ast-grep --pattern 'attr_$TYPE :$$$ATTRS'",
+        "description": "Matches attribute declarations"
+      },
+      {
+        "regex": "(before|after|around)_filter",
+        "suggestion": "ast-grep --pattern '$FILTER_filter $$$ACTION'",
+        "description": "Matches deprecated Rails filter methods"
+      },
+      {
+        "regex": "\\.select\\s*\\{\\s*\\|\\w+\\|\\s*\\w+\\.",
+        "suggestion": "ast-grep --pattern '$LIST.select { |$V| $V.$METHOD }'",
+        "description": "Matches blocks that can use symbol-to-proc"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'def $METHOD($$$PARAMS) $$$BODY end'",
+        "description": "Match method definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'class $NAME $$$BODY end'",
+        "description": "Match class definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if $CONDITION $$$THEN else $$$ELSE end'",
+        "description": "Match if-else statements"
+      },
+      {
+        "pattern": "ast-grep --pattern '$ENUMERABLE.map { |$VAR| $$$BODY }'",
+        "description": "Match map operations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'module $NAME $$$BODY end'",
+        "description": "Match module definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern '$LIST.$ITER(&:$METHOD)'",
+        "description": "Match symbol-to-proc usage"
+      },
+      {
+        "pattern": "ast-grep --pattern '$LIST.$ITER { |$V| $V.$METHOD }'",
+        "description": "Match iterator blocks"
+      }
+    ]
+  },
+  "rs": {
+    "pattern_detection": [
+      {
+        "regex": "^fn\\s+",
+        "suggestion": "ast-grep --pattern 'fn $NAME($$$PARAMS) -> $RETURN { $$$BODY }'",
+        "description": "Matches Rust function definitions with return type"
+      },
+      {
+        "regex": "^impl\\s+",
+        "suggestion": "ast-grep --pattern 'impl $$$GENERICS $TYPE { $$$BODY }'",
+        "description": "Matches impl blocks for types"
+      },
+      {
+        "regex": "match\\s+",
+        "suggestion": "ast-grep --pattern 'match $EXPR { $$$ARMS }'",
+        "description": "Matches pattern matching expressions"
+      },
+      {
+        "regex": "\\.unwrap\\(\\)",
+        "suggestion": "ast-grep --pattern '$EXPR.unwrap()'",
+        "description": "Matches unwrap calls on Results/Options"
+      },
+      {
+        "regex": "Result<",
+        "suggestion": "ast-grep --pattern 'Result<$OK, $ERR>'",
+        "description": "Matches Result type annotations"
+      },
+      {
+        "regex": "^struct\\s+",
+        "suggestion": "ast-grep --pattern 'struct $NAME { $$$FIELDS }'",
+        "description": "Matches struct definitions"
+      },
+      {
+        "regex": "\\.chars\\(\\)\\.enumerate\\(\\)",
+        "suggestion": "ast-grep --pattern '$A.chars().enumerate()'",
+        "description": "Matches inefficient char enumeration"
+      },
+      {
+        "regex": "\\.to_string\\(\\)\\.chars\\(\\)\\.count\\(\\)",
+        "suggestion": "ast-grep --pattern '$NUM.to_string().chars().count()'",
+        "description": "Matches inefficient digit counting"
+      },
+      {
+        "regex": "pub\\s+use\\s+",
+        "suggestion": "ast-grep --pattern 'pub use $B::$C;'",
+        "description": "Matches pub use statements"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'fn $NAME($$$PARAMS) -> $RETURN { $$$BODY }'",
+        "description": "Match function definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'match $EXPR { $$$ARMS }'",
+        "description": "Match pattern matching"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if let $PATTERN = $EXPR { $$$THEN } else { $$$ELSE }'",
+        "description": "Match if let expressions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'let $PATTERN = $EXPR;'",
+        "description": "Match let bindings"
+      },
+      {
+        "pattern": "ast-grep --pattern 'use $PATH::$$$ITEMS;'",
+        "description": "Match use statements"
+      }
+    ]
+  },
+  "scala": {
+    "pattern_detection": [
+      {
+        "regex": "^def\\s+",
+        "suggestion": "ast-grep --pattern 'def $NAME($$$PARAMS): $TYPE = $$$BODY'",
+        "description": "Matches Scala method definitions"
+      },
+      {
+        "regex": "^class\\s+",
+        "suggestion": "ast-grep --pattern 'class $NAME($$$PARAMS) { $$$BODY }'",
+        "description": "Matches class definitions with parameters"
+      },
+      {
+        "regex": "^object\\s+",
+        "suggestion": "ast-grep --pattern 'object $NAME { $$$BODY }'",
+        "description": "Matches singleton object definitions"
+      },
+      {
+        "regex": "match\\s*\\{",
+        "suggestion": "ast-grep --pattern '$EXPR match { $$$CASES }'",
+        "description": "Matches pattern matching expressions"
+      },
+      {
+        "regex": "^val\\s+",
+        "suggestion": "ast-grep --pattern 'val $NAME: $TYPE = $VALUE'",
+        "description": "Matches immutable value declarations"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'def $NAME($$$PARAMS): $TYPE = $$$BODY'",
+        "description": "Match method definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'class $NAME($$$PARAMS) extends $PARENT { $$$BODY }'",
+        "description": "Match class inheritance"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for ($PATTERN <- $EXPR) yield $$$BODY'",
+        "description": "Match for comprehensions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'trait $NAME { $$$BODY }'",
+        "description": "Match trait definitions"
+      },
+      {
+        "pattern": "ast-grep --pattern '$EXPR.map { $$$BODY }'",
+        "description": "Match map operations"
+      }
+    ]
+  },
+  "swift": {
+    "pattern_detection": [
+      {
+        "regex": "^func\\s+",
+        "suggestion": "ast-grep --pattern 'func $NAME($$$PARAMS) -> $RETURN { $$$BODY }'",
+        "description": "Matches Swift function declarations"
+      },
+      {
+        "regex": "^class\\s+",
+        "suggestion": "ast-grep --pattern 'class $NAME { $$$BODY }'",
+        "description": "Matches class declarations"
+      },
+      {
+        "regex": "^struct\\s+",
+        "suggestion": "ast-grep --pattern 'struct $NAME { $$$BODY }'",
+        "description": "Matches struct declarations"
+      },
+      {
+        "regex": "guard\\s+",
+        "suggestion": "ast-grep --pattern 'guard $CONDITION else { $$$ELSE }'",
+        "description": "Matches guard statements for early exits"
+      },
+      {
+        "regex": "^var\\s+",
+        "suggestion": "ast-grep --pattern 'var $NAME: $TYPE = $VALUE'",
+        "description": "Matches mutable variable declarations"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'func $NAME($$$PARAMS) -> $RETURN { $$$BODY }'",
+        "description": "Match function declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'if let $PATTERN = $EXPR { $$$THEN }'",
+        "description": "Match optional binding"
+      },
+      {
+        "pattern": "ast-grep --pattern 'switch $EXPR { $$$CASES }'",
+        "description": "Match switch statements"
+      },
+      {
+        "pattern": "ast-grep --pattern 'extension $TYPE { $$$BODY }'",
+        "description": "Match type extensions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'for $PATTERN in $COLLECTION { $$$BODY }'",
+        "description": "Match for-in loops"
+      }
+    ]
+  },
+  "ts": {
+    "pattern_detection": [
+      {
+        "regex": "([a-zA-Z_$][a-zA-Z0-9_$]*)\\s*\\(",
+        "suggestion": "ast-grep --pattern '$FUNC($$$ARGS)'",
+        "description": "Matches function calls"
+      },
+      {
+        "regex": "^import\\s+",
+        "suggestion": "ast-grep --pattern 'import $$$IMPORTS from $MODULE'",
+        "description": "Matches ES6 import statements"
+      },
+      {
+        "regex": "^interface\\s+",
+        "suggestion": "ast-grep --pattern 'interface $NAME { $$$MEMBERS }'",
+        "description": "Matches TypeScript interface declarations"
+      },
+      {
+        "regex": "^type\\s+",
+        "suggestion": "ast-grep --pattern 'type $NAME = $TYPE'",
+        "description": "Matches type alias declarations"
+      },
+      {
+        "regex": "^const\\s+",
+        "suggestion": "ast-grep --pattern 'const $VAR: $TYPE = $VALUE'",
+        "description": "Matches typed const declarations"
+      },
+      {
+        "regex": "=>",
+        "suggestion": "ast-grep --pattern '($$$PARAMS): $RETURN => $$$BODY'",
+        "description": "Matches typed arrow functions"
+      },
+      {
+        "regex": "console\\.",
+        "suggestion": "ast-grep --pattern 'console.$METHOD($$$)'",
+        "description": "Matches console method calls"
+      },
+      {
+        "regex": "Promise\\.all\\s*\\(",
+        "suggestion": "ast-grep --pattern 'Promise.all($$$)'",
+        "description": "Matches Promise.all calls"
+      },
+      {
+        "regex": "@Component\\s*\\(",
+        "suggestion": "ast-grep --pattern '@Component($$$)'",
+        "description": "Matches Angular Component decorator"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern 'function $NAME($$$PARAMS): $RETURN { $$$BODY }'",
+        "description": "Match typed function declarations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'class $NAME implements $INTERFACE { $$$BODY }'",
+        "description": "Match class implementations"
+      },
+      {
+        "pattern": "ast-grep --pattern 'async function $NAME($$$PARAMS): Promise<$TYPE> { $$$BODY }'",
+        "description": "Match async functions with Promise return"
+      },
+      {
+        "pattern": "ast-grep --pattern 'export $$$EXPORTED'",
+        "description": "Match export statements"
+      },
+      {
+        "pattern": "ast-grep --pattern '$OBJECT as $TYPE'",
+        "description": "Match type assertions"
+      },
+      {
+        "pattern": "ast-grep --pattern 'await $A' --inside 'Promise.all($_)'",
+        "description": "Match await inside Promise.all"
+      },
+      {
+        "pattern": "ast-grep --pattern 'import($MODULE)' --kind call_expression",
+        "description": "Match dynamic imports"
+      }
+    ]
+  },
+  "tsx": {
+    "pattern_detection": [
+      {
+        "regex": "<([A-Z][a-zA-Z0-9]*)",
+        "suggestion": "ast-grep --pattern '<$COMPONENT $$$PROPS>$$$CHILDREN</$COMPONENT>'",
+        "description": "Matches React component usage in JSX"
+      },
+      {
+        "regex": "^import\\s+.*from\\s+['\"]react",
+        "suggestion": "ast-grep --pattern 'import { $$$IMPORTS } from \"react\"'",
+        "description": "Matches React imports"
+      },
+      {
+        "regex": "^interface\\s+.*Props",
+        "suggestion": "ast-grep --pattern 'interface $NAME { $$$PROPS }'",
+        "description": "Matches React component prop interfaces"
+      },
+      {
+        "regex": "useState\\s*[<\\(]",
+        "suggestion": "ast-grep --pattern 'const [$STATE, $SETTER] = useState<$TYPE>($INITIAL)'",
+        "description": "Matches typed useState hook usage"
+      },
+      {
+        "regex": "^const\\s+[A-Z]",
+        "suggestion": "ast-grep --pattern 'const $COMPONENT: React.FC<$PROPS> = ($$$PARAMS) => { $$$BODY }'",
+        "description": "Matches functional component declarations"
+      },
+      {
+        "regex": "&&\\s*<",
+        "suggestion": "ast-grep --pattern '$CONDITION && <$COMPONENT $$$>' --kind jsx_expression",
+        "description": "Matches && short circuit in JSX"
+      },
+      {
+        "regex": "<a[^>]*>.*<a",
+        "suggestion": "ast-grep --pattern '<a $$$>$$$<a $$$>$$$</a>$$$</a>'",
+        "description": "Matches nested anchor tags"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '<$COMPONENT $$$PROPS />'",
+        "description": "Match self-closing components"
+      },
+      {
+        "pattern": "ast-grep --pattern 'const $COMPONENT = ($$$PROPS): JSX.Element => { $$$BODY }'",
+        "description": "Match functional components"
+      },
+      {
+        "pattern": "ast-grep --pattern 'useEffect(() => { $$$EFFECT }, [$$$DEPS])'",
+        "description": "Match useEffect hooks"
+      },
+      {
+        "pattern": "ast-grep --pattern '{$CONDITION && <$COMPONENT $$$PROPS />}'",
+        "description": "Match conditional rendering"
+      },
+      {
+        "pattern": "ast-grep --pattern '<>{$$$CHILDREN}</>}'",
+        "description": "Match React fragments"
+      },
+      {
+        "pattern": "ast-grep --pattern 'useState<$T>($V)' --has 'kind: type_arguments'",
+        "description": "Match useState with unnecessary type annotation"
+      },
+      {
+        "pattern": "ast-grep --pattern 'useCallback($FUNC, $DEPS)'",
+        "description": "Match useCallback hooks"
+      },
+      {
+        "pattern": "ast-grep --pattern 'useMemo(() => $EXPR, $DEPS)'",
+        "description": "Match useMemo hooks"
+      }
+    ]
+  },
+  "yml": {
+    "pattern_detection": [
+      {
+        "regex": "^([a-zA-Z_][a-zA-Z0-9_-]*):",
+        "suggestion": "ast-grep --pattern '$KEY: $VALUE'",
+        "description": "Matches YAML key-value pairs"
+      },
+      {
+        "regex": "^\\s*-\\s+",
+        "suggestion": "ast-grep --pattern '- $ITEM'",
+        "description": "Matches YAML list items"
+      },
+      {
+        "regex": "^\\s*port:",
+        "suggestion": "ast-grep --pattern 'port: $PORT'",
+        "description": "Matches port configuration"
+      },
+      {
+        "regex": "^\\s*host:",
+        "suggestion": "ast-grep --pattern 'host: $HOST'",
+        "description": "Matches host configuration"
+      }
+    ],
+    "general_examples": [
+      {
+        "pattern": "ast-grep --pattern '$KEY: $VALUE'",
+        "description": "Match key-value pairs"
+      },
+      {
+        "pattern": "ast-grep --pattern '- $ITEM'",
+        "description": "Match list items"
+      },
+      {
+        "pattern": "ast-grep --pattern '$KEY: $$$NESTED'",
+        "description": "Match nested structures"
+      },
+      {
+        "pattern": "ast-grep --pattern '$KEY: [$$$ITEMS]'",
+        "description": "Match inline arrays"
+      },
+      {
+        "pattern": "ast-grep --pattern '$KEY: { $$$PAIRS }'",
+        "description": "Match inline objects"
+      }
+    ]
+  }
+}
