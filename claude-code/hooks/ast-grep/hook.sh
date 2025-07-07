@@ -138,7 +138,18 @@ suggest_ast_grep_pattern() {
     local patterns_file="$(dirname "$0")/patterns.json"
     
     # Try to extract the search pattern from the grep command
-    local search_pattern=$(echo "$command" | sed -n 's/.*grep[[:space:]]\+\(-[[:space:]]*[a-zA-Z]*[[:space:]]*\)*"\?\([^"]*\)"\?.*/\2/p')
+    # Handle different quoting styles and flag positions
+    local search_pattern=""
+    if echo "$command" | grep -q 'grep.*"[^"]*"'; then
+        # Extract double-quoted pattern
+        search_pattern=$(echo "$command" | sed -n 's/.*grep[^"]*"\([^"]*\)".*/\1/p')
+    elif echo "$command" | grep -q "grep.*'[^']*'"; then
+        # Extract single-quoted pattern
+        search_pattern=$(echo "$command" | sed -n "s/.*grep[^']*'\([^']*\)'.*/\1/p")
+    else
+        # Extract unquoted pattern (first non-flag argument after grep)
+        search_pattern=$(echo "$command" | sed -n 's/.*grep\s\+\(-[a-zA-Z]\+\s\+\)*\([^-][^ ]*\).*/\2/p')
+    fi
     
     # First, map extension to language code
     local lang_code=""
@@ -185,8 +196,9 @@ suggest_ast_grep_pattern() {
         
         if [ -n "$lang_info" ]; then
             echo "   Pattern suggestions for $file_type:" >&2
-            echo "$lang_info" | while IFS= read -r suggestion; do
-                echo "   - $suggestion" >&2
+            # Use printf instead of echo to preserve literal $ characters
+            printf '%s\n' "$lang_info" | while IFS= read -r suggestion; do
+                printf '   - %s\n' "$suggestion" >&2
             done
         else
             # Fallback to generic suggestion if no patterns found
