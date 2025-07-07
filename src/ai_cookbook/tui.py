@@ -184,12 +184,12 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict, show_
     
     print(f"\n{Colors.BOLD}Actions:{Colors.NC}")
     print(f"  {Colors.CYAN}↑/↓{Colors.NC}     Navigate components")
-    print(f"  {Colors.CYAN}Enter{Colors.NC}   Open component submenu")
+    print(f"  {Colors.CYAN}Enter/→{Colors.NC} Open component submenu")
     print(f"  {Colors.CYAN}d{Colors.NC}       Toggle details view")
     print(f"  {Colors.CYAN}a{Colors.NC}       Install all components")
     print(f"  {Colors.CYAN}r{Colors.NC}       Uninstall all components")
     print(f"  {Colors.CYAN}s{Colors.NC}       Show status")
-    print(f"  {Colors.CYAN}q{Colors.NC}       Quit")
+    print(f"  {Colors.CYAN}q/←{Colors.NC}     Quit")
 
 def run_interactive():
     """Interactive component installation with arrow key navigation"""
@@ -229,7 +229,7 @@ def run_interactive():
                 # Timeout - check if we need to redraw due to resize
                 if terminal_resized:
                     continue
-            elif key == 'q' or key == '\x03':  # q or Ctrl+C
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
                 print(Colors.SHOW_CURSOR)
                 return
             elif key == 'UP' and selected > 0:
@@ -246,7 +246,7 @@ def run_interactive():
             elif key == 's':  # Show status
                 show_status_screen(installers)
                 force_redraw = True
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 selected_name = installer_names[selected]
                 installer = installers[selected_name]
                 
@@ -440,7 +440,7 @@ def run_hooks_menu(installer):
             if key is None:
                 if terminal_resized:
                     continue
-            elif key == 'q' or key == '\x03':  # q or Ctrl+C
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
                 print(Colors.SHOW_CURSOR)
                 return
             elif key == 'UP' and selected > 0:
@@ -460,7 +460,7 @@ def run_hooks_menu(installer):
                     mode = new_mode
                     installer.set_mode(mode)
                 force_redraw = True
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 selected_hook = available_hooks[selected]
                 
                 # Toggle installation for selected hook
@@ -554,7 +554,7 @@ def select_hooks_mode():
                     print(f"   {Colors.DIM}.claude/settings.local.json{Colors.NC}")
                 
                 print()
-                print(f"\n{Colors.DIM}↑/↓: Navigate  ENTER: Select  q: Cancel{Colors.NC}")
+                print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Select  q/←: Cancel{Colors.NC}")
                 
                 force_redraw = False
             
@@ -563,7 +563,7 @@ def select_hooks_mode():
             if key is None:
                 if terminal_resized:
                     continue
-            elif key == 'q' or key == '\x03':  # q or Ctrl+C
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
                 print(Colors.SHOW_CURSOR)
                 return None
             elif key == 'UP' and selected > 0:
@@ -572,7 +572,7 @@ def select_hooks_mode():
             elif key == 'DOWN' and selected < 1:
                 selected = 1
                 force_redraw = True
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 print(Colors.SHOW_CURSOR)
                 return "global" if selected == 0 else "local"
                     
@@ -666,11 +666,11 @@ def draw_hooks_menu(hooks: list, selected: int, installer, show_details: bool = 
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
     selected_hook = hooks[selected]
     if selected_hook in global_hooks or selected_hook in local_hooks:
-        print(f"{Colors.YELLOW}Press ENTER to uninstall '{selected_hook}'{Colors.NC}")
+        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_hook}'{Colors.NC}")
     else:
-        print(f"{Colors.GREEN}Press ENTER to install '{selected_hook}'{Colors.NC}")
+        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_hook}'{Colors.NC}")
     
-    print(f"\n{Colors.DIM}↑/↓: Navigate  ENTER: Install/Uninstall  d: Details  a: Install All  r: Remove All  m: Change Mode  q: Back{Colors.NC}")
+    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  m: Change Mode  q/←: Back{Colors.NC}")
 
 def run_commands_menu(installer):
     """Run commands component submenu with individual command management"""
@@ -708,7 +708,7 @@ def run_commands_menu(installer):
             if key is None:
                 if terminal_resized:
                     continue
-            elif key == 'q' or key == '\x03':  # q or Ctrl+C
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
                 print(Colors.SHOW_CURSOR)
                 return
             elif key == 'UP' and selected > 0:
@@ -722,7 +722,7 @@ def run_commands_menu(installer):
             elif key == 'd':
                 show_details = not show_details
                 force_redraw = True
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 selected_command = available_commands[selected]
                 
                 # Toggle installation for selected command
@@ -778,6 +778,10 @@ def draw_commands_menu(commands: list, selected: int, installer, show_details: b
     print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 Claude Commands{Colors.NC}")
     print(f"Available Commands: {len(commands)}\n")
     
+    # Calculate maximum command name length for alignment
+    max_cmd_length = max(len(cmd) for cmd in commands) if commands else 30
+    max_cmd_length = max(max_cmd_length, 35)  # Ensure minimum width
+    
     # Commands list
     for i, command in enumerate(commands):
         is_selected = i == selected
@@ -786,9 +790,9 @@ def draw_commands_menu(commands: list, selected: int, installer, show_details: b
         # Selection indicator
         if is_selected:
             if is_installed:
-                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{command:<30}{Colors.NC} {Colors.GREEN}[INSTALLED]{Colors.NC}")
+                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{command:<{max_cmd_length}}{Colors.NC} {Colors.GREEN}[INSTALLED]{Colors.NC}")
             else:
-                print(f"   {Colors.REVERSE}{command:<30}{Colors.NC} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
+                print(f"   {Colors.REVERSE}{command:<{max_cmd_length}}{Colors.NC} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
             
             if show_details:
                 print(f"\n{Colors.DIM}     Claude command template for automation{Colors.NC}")
@@ -798,19 +802,19 @@ def draw_commands_menu(commands: list, selected: int, installer, show_details: b
                 print()
         else:
             if is_installed:
-                print(f" {Colors.GREEN}✓{Colors.NC} {command:<30} {Colors.GREEN}[INSTALLED]{Colors.NC}")
+                print(f" {Colors.GREEN}✓{Colors.NC} {command:<{max_cmd_length}} {Colors.GREEN}[INSTALLED]{Colors.NC}")
             else:
-                print(f"   {Colors.DIM}{command:<30} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
+                print(f"   {Colors.DIM}{command:<{max_cmd_length}} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
     
     # Footer
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
     selected_command = commands[selected]
     if selected_command in installed_commands:
-        print(f"{Colors.YELLOW}Press ENTER to uninstall '{selected_command}'{Colors.NC}")
+        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_command}'{Colors.NC}")
     else:
-        print(f"{Colors.GREEN}Press ENTER to install '{selected_command}'{Colors.NC}")
+        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_command}'{Colors.NC}")
     
-    print(f"\n{Colors.DIM}↑/↓: Navigate  ENTER: Install/Uninstall  d: Details  a: Install All  r: Remove All  q: Back{Colors.NC}")
+    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
 
 def run_code_standards_menu(installer):
     """Run code standards component submenu with individual language management"""
@@ -848,7 +852,7 @@ def run_code_standards_menu(installer):
             if key is None:
                 if terminal_resized:
                     continue
-            elif key == 'q' or key == '\x03':  # q or Ctrl+C
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
                 print(Colors.SHOW_CURSOR)
                 return
             elif key == 'UP' and selected > 0:
@@ -862,7 +866,7 @@ def run_code_standards_menu(installer):
             elif key == 'd':
                 show_details = not show_details
                 force_redraw = True
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 selected_language = available_languages[selected]
                 
                 # Toggle installation for selected language
@@ -946,11 +950,11 @@ def draw_code_standards_menu(languages: list, selected: int, installer, show_det
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
     selected_language = languages[selected]
     if selected_language in installed_languages:
-        print(f"{Colors.YELLOW}Press ENTER to uninstall '{selected_language}' standards{Colors.NC}")
+        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_language}' standards{Colors.NC}")
     else:
-        print(f"{Colors.GREEN}Press ENTER to install '{selected_language}' standards{Colors.NC}")
+        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_language}' standards{Colors.NC}")
     
-    print(f"\n{Colors.DIM}↑/↓: Navigate  ENTER: Install/Uninstall  d: Details  a: Install All  r: Remove All  q: Back{Colors.NC}")
+    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
 
 def run_scripts_menu(installer):
     """Run scripts component submenu"""
@@ -967,16 +971,16 @@ def run_scripts_menu(installer):
     print(f"\n{Colors.DIM}Scripts PATH is managed as a single unit.{Colors.NC}")
     
     if installer.is_installed():
-        print(f"\n{Colors.YELLOW}Press ENTER to remove scripts from PATH{Colors.NC}")
+        print(f"\n{Colors.YELLOW}Press Enter/→ to remove scripts from PATH{Colors.NC}")
         action_text = "remove from PATH"
     else:
-        print(f"\n{Colors.GREEN}Press ENTER to add scripts to PATH{Colors.NC}")
+        print(f"\n{Colors.GREEN}Press Enter/→ to add scripts to PATH{Colors.NC}")
         action_text = "add to PATH"
     
-    print(f"{Colors.DIM}Press q to go back{Colors.NC}")
+    print(f"{Colors.DIM}Press q or ← to go back{Colors.NC}")
     
     key = getch()
-    if key == '\r' or key == '\n':  # Enter
+    if key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
         if installer.is_installed():
             result = installer.uninstall()
         else:
@@ -1047,13 +1051,13 @@ def run_recommended_menu(installer):
                     else:
                         print(f"   {name:<30} {Colors.DIM}{desc}{Colors.NC}")
                 
-                print(f"\n{Colors.DIM}Press ENTER to select, q to go back{Colors.NC}")
+                print(f"\n{Colors.DIM}Press Enter/→ to select, q/← to go back{Colors.NC}")
                 force_redraw = False
             
             # Get user input
             key = getch()
             
-            if key == 'q':
+            if key == 'q' or key == 'LEFT':  # q or left arrow
                 break
             elif key == 'UP':
                 selected = (selected - 1) % len(options)
@@ -1061,7 +1065,7 @@ def run_recommended_menu(installer):
             elif key == 'DOWN':
                 selected = (selected + 1) % len(options)
                 force_redraw = True
-            elif key == '\r' or key == '\n':  # Enter
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 # Execute selected option
                 option = options[selected]
                 action = option.get('action')
