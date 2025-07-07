@@ -39,14 +39,40 @@ case "$tool_name" in
         if echo "$command" | grep -qE "(^|[;&|])\s*grep\s+" && \
            ! echo "$command" | grep -qE "(ripgrep|rg|ast-grep)"; then
             
-            # Extract file patterns from the command using enhanced pattern extraction
-            # Function to extract multiple patterns and handle complex cases
+            # Extract file patterns from the command - simplified approach
             extract_file_patterns() {
                 local cmd="$1"
-                # Remove the grep command and its flags to focus on file patterns
-                # Handle patterns like: *.js, "*.{ts,tsx}", 'src/**/*.py', etc.
-                echo "$cmd" | sed -E 's/^[^[:space:]]*grep[[:space:]]+(-[[:space:]]*[a-zA-Z]*[[:space:]]*)*("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)[[:space:]]*//' | \
-                    grep -oE '(["'"'"']?[^"'"'"'\s]*\*?\.[a-zA-Z0-9\{\},]+["'"'"']?|["'"'"'][^"'"'"']+["'"'"'])' | tr -d '"' | tr -d "'"
+                local patterns=""
+                
+                # Look for --include= patterns first
+                if echo "$cmd" | grep -q -- '--include='; then
+                    patterns=$(echo "$cmd" | grep -oE -- '--include="?[^"[:space:]]+"?' | sed 's/--include=//')
+                    # Remove quotes if present
+                    patterns=$(echo "$patterns" | tr -d '"' | tr -d "'")
+                else
+                    # Remove grep command and common flags
+                    local cleaned=$(echo "$cmd" | sed -E 's/^[^[:space:]]*grep[[:space:]]+//')
+                    # Remove flags like -r, -n, -i, -e pattern, etc.
+                    cleaned=$(echo "$cleaned" | sed -E 's/-[rinlvH]+[[:space:]]+//g')
+                    cleaned=$(echo "$cleaned" | sed -E 's/-e[[:space:]]+("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+)[[:space:]]*//g')
+                    
+                    # Remove the search pattern (first non-flag argument that doesn't look like a file)
+                    # This handles: "pattern" or 'pattern' or pattern (without extension)
+                    cleaned=$(echo "$cleaned" | sed -E 's/^("[^"]*"|'"'"'[^'"'"']*'"'"'|[^[:space:]]+\.[^[:space:]]+|[^[:space:]]+)[[:space:]]+//')
+                    
+                    # Now extract file patterns from what remains
+                    # Match files with extensions, including globs and paths
+                    patterns=$(echo "$cleaned" | grep -oE '[^[:space:]]+\.[a-zA-Z0-9\{\},*]+|"[^"]+"|'"'"'[^'"'"']+'"'"'' | \
+                        while read -r pattern; do
+                            # Remove quotes and check if it has an extension
+                            local unquoted=$(echo "$pattern" | tr -d '"' | tr -d "'")
+                            if echo "$unquoted" | grep -qE '\.[a-zA-Z0-9\{\},*]+$'; then
+                                echo "$unquoted"
+                            fi
+                        done)
+                fi
+                
+                echo "$patterns"
             }
             
             # Get all file patterns
@@ -76,7 +102,7 @@ fi
 
 # Load extensions from config
 extensions_file="$(dirname "$0")/extensions.json"
-code_extensions=$(jq -r '.supported_extensions | to_entries[] | .value[]' "$extensions_file" 2>/dev/null | sed 's/^/./')
+code_extensions=$(jq -r '.supported_extensions | to_entries[] | .value[]' "$extensions_file" 2>/dev/null)
 
 # Check if the include pattern contains any code file extension
 is_code_file=false
@@ -84,29 +110,24 @@ is_code_file=false
 # For unknown files, check if the original command mentions code files
 if [ "$include_pattern" = "unknown_files" ]; then
     # Check if the command contains any code file extensions
-    while IFS= read -r ext; do
-        # Skip empty lines
-        [ -z "$ext" ] && continue
-        
+    for ext in $code_extensions; do
         # Check if the command contains this extension
-        if [[ "$command" == *"$ext"* ]]; then
+        if [[ "$command" == *".$ext"* ]]; then
             is_code_file=true
             break
         fi
-    done <<< "$code_extensions"
+    done
 else
     # Check against the list of extensions for extracted patterns
-    while IFS= read -r ext; do
-        # Skip empty lines
-        [ -z "$ext" ] && continue
-        
-        # Check if include pattern ends with or contains this extension
-        # Support patterns like *.js, **/*.js, src/*.js
+    # This now handles brace expansion like *.{ts,tsx} and complex patterns
+    for ext in $code_extensions; do
+        # Check if include pattern contains this extension
+        # This works for: *.js, **/*.js, src/*.js, *.{js,jsx}, etc.
         if [[ "$include_pattern" == *"$ext"* ]]; then
             is_code_file=true
             break
         fi
-    done <<< "$code_extensions"
+    done
 fi
 
 # Function to suggest ast-grep patterns based on grep pattern and file type
@@ -189,8 +210,25 @@ if [ "$is_code_file" = true ]; then
     # Determine file type from include pattern if possible
     detected_file_type=""
     if [ "$include_pattern" != "unknown_files" ]; then
-        # Extract extension from pattern
-        detected_file_type=$(echo "$include_pattern" | grep -oE '\.[a-zA-Z0-9]+' | head -1)
+        # Debug: show what we're working with
+        # Extract extension from pattern - look for any known extension
+        # Match the extension at the end of the pattern or before glob markers
+        # Sort extensions by length (longest first) to avoid false matches
+        sorted_extensions=$(echo "$code_extensions" | tr ' ' '\n' | awk '{ print length, $0 }' | sort -rn | cut -d' ' -f2-)
+        for ext in $sorted_extensions; do
+            # Check for exact extension match at word boundaries
+            # Handle patterns like *.ext, path/file.ext, *.{ext,other}, etc.
+            # Make sure we match .ext not just any occurrence of ext
+            # Use grep for more reliable pattern matching
+            # Handle both .ext and {ext in brace expansions
+            # For .c, we need to ensure it's not .c++ or .cpp etc
+            # Escape special regex characters in extension
+            escaped_ext=$(echo "$ext" | sed 's/[+]/\\&/g')
+            if echo "$include_pattern" | grep -qE "(\\.|\\{)${escaped_ext}([^a-zA-Z0-9+]|,|\\}|$)"; then
+                detected_file_type=".$ext"
+                break
+            fi
+        done
     fi
     
     # Suggest patterns if we detected a file type
