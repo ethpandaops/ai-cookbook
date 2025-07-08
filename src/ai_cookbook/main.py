@@ -158,7 +158,10 @@ def check_for_updates(skip_prompt: bool = False) -> None:
             return
         elif not updates_to_apply:
             # No updates available
-            update_ui.show_no_updates()
+            if hasattr(update_ui, 'show_no_updates'):
+                update_ui.show_no_updates()
+            else:
+                print("✅ All components are up to date!")
         else:
             # Apply updates
             total_updated = 0
@@ -241,7 +244,7 @@ def main() -> None:
     parser.add_argument('--help', action='store_true', help='Show this help message')
     parser.add_argument('--yes', '-y', action='store_true', help='Skip confirmation prompts')
     parser.add_argument('--no-auto-update', action='store_true', help='Skip automatic update check')
-    parser.add_argument('command', nargs='?', help='Command to run (recommended)')
+    parser.add_argument('command', nargs='?', help='Command to run (recommended, uninstall)')
     
     args, unknown = parser.parse_known_args()
     
@@ -261,6 +264,7 @@ def main() -> None:
         print("Usage:")
         print("  ai-cookbook              Launch interactive installer")
         print("  ai-cookbook recommended  Install recommended tools and remove non-recommended ones")
+        print("  ai-cookbook uninstall    Uninstall all installed components")
         print("  ai-cookbook --help       Show this help")
         print("  ai-cookbook --version    Show version")
         print("  ai-cookbook --yes        Skip confirmation prompts")
@@ -269,8 +273,8 @@ def main() -> None:
         print("Interactive mode: Use arrow keys to navigate, Enter/→ to select, q/← to quit.")
         return
     
-    # Check for updates before any command (unless skipped)
-    if not args.no_auto_update:
+    # Check for updates before any command (unless skipped or uninstall/recommended command)
+    if not args.no_auto_update and args.command not in ['uninstall', 'recommended']:
         check_for_updates(skip_prompt=False)
     
     # Handle recommended command
@@ -347,10 +351,39 @@ def main() -> None:
             sys.exit(1)
         return
     
+    # Handle uninstall command
+    if args.command == 'uninstall':
+        try:
+            from .installers.uninstall_all import UninstallAllInstaller
+            installer = UninstallAllInstaller()
+            
+            print("🐼 ethPandaOps AI Cookbook - Uninstall All Tools")
+            print("=" * 60)
+            
+            # Run uninstall
+            result = installer.uninstall(skip_confirmation=args.yes)
+            
+            if result.success:
+                print("\n✅ " + result.message)
+            else:
+                print("\n❌ " + result.message)
+                sys.exit(1)
+                
+        except ImportError as e:
+            print(f"❌ Error loading uninstall installer: {e}")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("\n❌ Uninstall cancelled by user.")
+            sys.exit(0)
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
+            sys.exit(1)
+        return
+    
     # Handle unknown commands
-    if args.command and args.command != 'recommended':
+    if args.command and args.command not in ['recommended', 'uninstall']:
         print(f"❌ Unknown command: {args.command}")
-        print("Available commands: recommended")
+        print("Available commands: recommended, uninstall")
         print("Run 'ai-cookbook --help' for usage information.")
         sys.exit(1)
     

@@ -47,6 +47,11 @@ The majority of this repo focuses around [Claude Code](https://claude.ai/code) i
    ai-cookbook recommended
    ```
 
+6. To uninstall all installed components:
+   ```bash
+   ai-cookbook uninstall
+   ```
+
 
 # Tools
 ## 🛠️ Claude Code Commands
