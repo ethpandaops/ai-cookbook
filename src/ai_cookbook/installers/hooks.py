@@ -12,7 +12,7 @@ from ..utils.file_operations import (
     list_files, read_json_file, write_json_file
 )
 from ..utils.system import run_command
-from ..config.settings import CLAUDE_DIR
+from ..config.settings import CLAUDE_DIR, ORG_NAME
 from ..updaters.detector import UpdateStatus
 
 # Get the project root directory (ai-cookbook)
@@ -35,7 +35,7 @@ class HooksInstaller(InteractiveInstaller):
         self.hooks_source = PROJECT_ROOT / "claude-code" / "hooks"
         self.current_mode = "global"  # Default to global mode
         
-        # Initialize update detector for hooks in ethpandaops directory
+        # Initialize update detector for hooks in organization directory
         from ..config.settings import CLAUDE_HOOKS_DIR
         self.initialize_update_detector(self.hooks_source, CLAUDE_HOOKS_DIR)
         
@@ -254,7 +254,7 @@ class HooksInstaller(InteractiveInstaller):
             installed_hook_path.chmod(0o755)
             
             # Update metadata for the hook
-            if 'ethpandaops' in str(hooks_dir):
+            if ORG_NAME in str(hooks_dir):
                 # For local installations, create a separate update detector
                 if mode == "local":
                     from ..updaters.detector import UpdateDetector
@@ -321,7 +321,7 @@ class HooksInstaller(InteractiveInstaller):
                 installed_hook_path.unlink()
             
             # Remove metadata
-            if 'ethpandaops' in str(hooks_dir):
+            if ORG_NAME in str(hooks_dir):
                 hook_file_name = f"{hook_name}.sh"
                 if mode == "local":
                     from ..updaters.detector import UpdateDetector
@@ -512,9 +512,9 @@ class HooksInstaller(InteractiveInstaller):
             Path to hooks directory
         """
         if mode == "local":
-            return Path.cwd() / ".claude" / "hooks" / "ethpandaops"
+            return Path.cwd() / ".claude" / "hooks" / ORG_NAME
         else:
-            return CLAUDE_DIR / "hooks" / "ethpandaops"
+            return CLAUDE_DIR / "hooks" / ORG_NAME
             
     def _get_settings_path(self, mode: str) -> Path:
         """Get settings file path based on mode.
@@ -635,7 +635,7 @@ class HooksInstaller(InteractiveInstaller):
         
         for project_path in projects_with_hooks:
             # Create UpdateDetector for this project's local hooks
-            local_hooks_dir = project_path / ".claude" / "hooks" / "ethpandaops"
+            local_hooks_dir = project_path / ".claude" / "hooks" / ORG_NAME
             
             if local_hooks_dir.exists():
                 # Initialize a temporary update detector for this project

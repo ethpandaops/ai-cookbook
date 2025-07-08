@@ -7,6 +7,8 @@ import sys
 import os
 import argparse
 
+from .config.settings import ORG_DISPLAY_NAME, VERSION
+
 def _apply_installer_operation(installer, file_name: str, operation: str) -> bool:
     """Apply an operation (install/uninstall) to a file using the appropriate installer method.
     
@@ -232,7 +234,7 @@ def check_for_updates(skip_prompt: bool = False) -> None:
 def main() -> None:
     """Main entry point - supports interactive mode and recommended command"""
     parser = argparse.ArgumentParser(
-        description='ethPandaOps AI Cookbook unified installer',
+        description=f'{ORG_DISPLAY_NAME} AI Cookbook unified installer',
         add_help=False
     )
     parser.add_argument('--version', action='store_true', help='Show version')
@@ -244,11 +246,11 @@ def main() -> None:
     args, unknown = parser.parse_known_args()
     
     if args.version:
-        print("ai-cookbook v1.0.0")
+        print(f"ai-cookbook v{VERSION}")
         return
     
     if args.help:
-        print("ai-cookbook v1.0.0 - ethPandaOps AI Cookbook unified installer")
+        print(f"ai-cookbook v{VERSION} - {ORG_DISPLAY_NAME} AI Cookbook unified installer")
         print()
         print("Interactive installer for:")
         print("  • Claude Commands - AI-assisted development commands")

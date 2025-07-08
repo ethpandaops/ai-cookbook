@@ -9,11 +9,15 @@ from pathlib import Path
 APP_NAME = "ai-cookbook"
 VERSION = "1.0.0"
 
+# Organization
+ORG_NAME = "ethpandaops"
+ORG_DISPLAY_NAME = "ethPandaOps"
+
 # Installation paths
 CLAUDE_DIR = Path.home() / ".claude"
-CLAUDE_COMMANDS_DIR = CLAUDE_DIR / "commands" / "ethpandaops"
-CLAUDE_STANDARDS_DIR = CLAUDE_DIR / "ethpandaops" / "code-standards"
-CLAUDE_HOOKS_DIR = CLAUDE_DIR / "hooks" / "ethpandaops"
+CLAUDE_COMMANDS_DIR = CLAUDE_DIR / "commands" / ORG_NAME
+CLAUDE_STANDARDS_DIR = CLAUDE_DIR / ORG_NAME / "code-standards"
+CLAUDE_HOOKS_DIR = CLAUDE_DIR / "hooks" / ORG_NAME
 
 # Source paths (relative to repo root)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
@@ -43,10 +47,6 @@ MAIN_MENU_ITEMS = [
     "Hooks",
     "Scripts"
 ]
-
-# Organization
-ORG_NAME = "ethpandaops"
-ORG_DISPLAY_NAME = "ethPandaOps"
 
 # File markers
 META_FILE_NAME = ".ai-cookbook-meta.json"

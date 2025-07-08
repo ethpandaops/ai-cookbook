@@ -2,8 +2,10 @@
 PandaOps Cookbook - Installation and management tools for Ethereum node operations
 """
 
-__version__ = "1.0.0"
-__author__ = "ethpandaops"
+from .config.settings import VERSION, ORG_NAME
+
+__version__ = VERSION
+__author__ = ORG_NAME
 __description__ = "Installation and management tools for Ethereum node operations"
 
 # Package imports

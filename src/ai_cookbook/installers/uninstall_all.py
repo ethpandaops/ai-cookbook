@@ -11,17 +11,17 @@ from ..installers.code_standards import CodeStandardsInstaller
 from ..installers.hooks import HooksInstaller
 from ..installers.scripts import ScriptsInstaller
 from ..utils.file_operations import file_exists, directory_exists
-from ..config.settings import CLAUDE_DIR
+from ..config.settings import CLAUDE_DIR, ORG_NAME, ORG_DISPLAY_NAME
 from ..project_registry import ProjectRegistry
 
 
 class UninstallAllInstaller(InteractiveInstaller):
-    """Complete uninstaller for all ethPandaOps AI Cookbook components.
+    f"""Complete uninstaller for all {ORG_DISPLAY_NAME} AI Cookbook components.
     
     Removes:
     - All code standards and CLAUDE.md entries
-    - All commands from ~/.claude/commands/ethpandaops
-    - All hooks from ~/.claude/hooks/ethpandaops
+    - All commands from ~/.claude/commands/{ORG_NAME}
+    - All hooks from ~/.claude/hooks/{ORG_NAME}
     - All local project hooks and settings
     - Scripts from PATH
     - Project registry entries
@@ -31,7 +31,7 @@ class UninstallAllInstaller(InteractiveInstaller):
         """Initialize complete uninstaller."""
         super().__init__(
             name="Uninstall Everything",
-            description="Remove all ethPandaOps AI Cookbook components"
+            description=f"Remove all {ORG_DISPLAY_NAME} AI Cookbook components"
         )
         self.installers = {
             'commands': CommandsInstaller(),
@@ -93,7 +93,7 @@ class UninstallAllInstaller(InteractiveInstaller):
         )
         
     def uninstall(self, skip_confirmation: bool = False) -> InstallationResult:
-        """Uninstall all ethPandaOps AI Cookbook components.
+        f"""Uninstall all {ORG_DISPLAY_NAME} AI Cookbook components.
         
         Args:
             skip_confirmation: Skip confirmation prompt
@@ -107,7 +107,7 @@ class UninstallAllInstaller(InteractiveInstaller):
             if status['total_items'] == 0:
                 return InstallationResult(
                     True,
-                    "No ethPandaOps AI Cookbook components found to uninstall"
+                    f"No {ORG_DISPLAY_NAME} AI Cookbook components found to uninstall"
                 )
             
             self._show_uninstall_preview(status)
@@ -145,7 +145,7 @@ class UninstallAllInstaller(InteractiveInstaller):
         Args:
             status: Status dictionary from check_status()
         """
-        print("\n🗑️  The following ethPandaOps AI Cookbook components will be removed:")
+        print(f"\n🗑️  The following {ORG_DISPLAY_NAME} AI Cookbook components will be removed:")
         print("=" * 60)
         
         for component, items in status['components_installed'].items():
@@ -380,9 +380,9 @@ class UninstallAllInstaller(InteractiveInstaller):
         print("\n🧹 Cleaning up directories...")
         
         directories_to_remove = [
-            (CLAUDE_DIR / 'ethpandaops', "Directory: ~/.claude/ethpandaops"),
-            (CLAUDE_DIR / 'commands' / 'ethpandaops', "Directory: ~/.claude/commands/ethpandaops"),
-            (CLAUDE_DIR / 'hooks' / 'ethpandaops', "Directory: ~/.claude/hooks/ethpandaops")
+            (CLAUDE_DIR / ORG_NAME, f"Directory: ~/.claude/{ORG_NAME}"),
+            (CLAUDE_DIR / 'commands' / ORG_NAME, f"Directory: ~/.claude/commands/{ORG_NAME}"),
+            (CLAUDE_DIR / 'hooks' / ORG_NAME, f"Directory: ~/.claude/hooks/{ORG_NAME}")
         ]
         
         for directory, description in directories_to_remove:

@@ -12,6 +12,7 @@ import signal
 from pathlib import Path
 from typing import List, Dict, Optional, Callable, Any
 
+from .config.settings import ORG_NAME, ORG_DISPLAY_NAME, VERSION
 from .installers.commands import CommandsInstaller
 from .installers.code_standards import CodeStandardsInstaller
 from .installers.hooks import HooksInstaller
@@ -166,8 +167,8 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict[str, A
     clear_screen()
     
     # Header
-    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 ethPandaOps AI Cookbook Installer{Colors.NC}")
-    print(f"Version: {Colors.GREEN}v1.0.0{Colors.NC}\n")
+    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 {ORG_DISPLAY_NAME} AI Cookbook Installer{Colors.NC}")
+    print(f"Version: {Colors.GREEN}v{VERSION}{Colors.NC}\n")
     
     # Draw each section based on the installer type
     current_section = None
@@ -329,7 +330,7 @@ def run_interactive() -> None:
 def show_status_screen(installers: Dict[str, Any]) -> None:
     """Show detailed status screen"""
     clear_screen()
-    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 ethPandaOps AI Cookbook - Installation Status{Colors.NC}\n")
+    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 {ORG_DISPLAY_NAME} AI Cookbook - Installation Status{Colors.NC}\n")
     
     for name, installer in installers.items():
         status = "INSTALLED" if installer.is_installed() else "NOT INSTALLED"
@@ -991,13 +992,13 @@ def run_uninstall_menu(installer: Any) -> None:
                 
                 # Header
                 print(f"\n{Colors.BOLD}{Colors.RED}🗑️  Uninstall Everything{Colors.NC}")
-                print(f"{Colors.YELLOW}⚠️  This will remove all ethPandaOps AI Cookbook components{Colors.NC}\n")
+                print(f"{Colors.YELLOW}⚠️  This will remove all {ORG_DISPLAY_NAME} AI Cookbook components{Colors.NC}\n")
                 
                 # Get current status
                 status = installer.check_status()
                 
                 if status['total_items'] == 0:
-                    print(f"{Colors.GREEN}✓ No ethPandaOps components are currently installed{Colors.NC}")
+                    print(f"{Colors.GREEN}✓ No {ORG_DISPLAY_NAME} components are currently installed{Colors.NC}")
                     print(f"\n{Colors.DIM}Press any key to return...{Colors.NC}")
                     getch()
                     break
@@ -1031,12 +1032,12 @@ def run_uninstall_menu(installer: Any) -> None:
                 
                 # Show directories that will be cleaned
                 print(f"\n{Colors.BOLD}Directories to be removed:{Colors.NC}")
-                print("  • ~/.claude/ethpandaops/")
-                print("  • ~/.claude/commands/ethpandaops/")
-                print("  • ~/.claude/hooks/ethpandaops/")
+                print(f"  • ~/.claude/{ORG_NAME}/")
+                print(f"  • ~/.claude/commands/{ORG_NAME}/")
+                print(f"  • ~/.claude/hooks/{ORG_NAME}/")
                 
                 print(f"\n{Colors.BOLD}Files to be cleaned:{Colors.NC}")
-                print("  • ~/.claude/CLAUDE.md (ethPandaOps entries)")
+                print(f"  • ~/.claude/CLAUDE.md ({ORG_DISPLAY_NAME} entries)")
                 print("  • ~/.claude/settings.json (hook entries)")
                 print("  • ~/.claude/.ai-cookbook-projects.json")
                 print("  • Local project .claude/settings.json files")

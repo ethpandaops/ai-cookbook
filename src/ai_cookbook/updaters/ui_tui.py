@@ -8,6 +8,7 @@ import signal
 from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 from .detector import UpdateStatus
+from ..config.settings import ORG_DISPLAY_NAME, VERSION
 # Removed BaseInstaller import to avoid circular dependency
 
 # Import the Colors and utility functions from main TUI
@@ -28,8 +29,8 @@ class TUIUpdateUI:
         
     def _draw_header(self):
         """Draw the header section."""
-        print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 ethPandaOps AI Cookbook - Update Manager{Colors.NC}")
-        print(f"Version: {Colors.GREEN}v1.0.0{Colors.NC}\n")
+        print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 {ORG_DISPLAY_NAME} AI Cookbook - Update Manager{Colors.NC}")
+        print(f"Version: {Colors.GREEN}v{VERSION}{Colors.NC}\n")
     
     def _draw_main_view(self, all_updates: Dict[str, Tuple[str, UpdateStatus, Any]]):
         """Draw the main update overview."""

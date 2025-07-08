@@ -10,6 +10,7 @@ from ..installers.code_standards import CodeStandardsInstaller
 from ..installers.hooks import HooksInstaller
 from ..installers.scripts import ScriptsInstaller
 from ..utils.file_operations import file_exists
+from ..config.settings import ORG_NAME, ORG_DISPLAY_NAME
 
 # Get the project root directory (ai-cookbook)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -19,7 +20,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
     """Installer for recommended tools configuration.
     
     Manages installation of the exact set of tools recommended by the team.
-    Safely uninstalls ethPandaOps tools not in the recommended set.
+    Safely uninstalls {ORG_DISPLAY_NAME} tools not in the recommended set.
     """
     
     def __init__(self) -> None:
@@ -151,8 +152,8 @@ class RecommendedToolsInstaller(InteractiveInstaller):
         if skip_confirmation:
             return True
             
-        print("This will install recommended tools and remove non-recommended ethPandaOps tools.")
-        print("Only ethPandaOps-managed tools will be removed - other tools are safe.")
+        print(f"This will install recommended tools and remove non-recommended {ORG_DISPLAY_NAME} tools.")
+        print(f"Only {ORG_DISPLAY_NAME}-managed tools will be removed - other tools are safe.")
         response = input("Continue? (y/N): ").lower().strip()
         return response == 'y'
     
@@ -175,7 +176,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             config: Configuration dictionary with recommended tools
             results: Results dictionary to update with installation outcomes
         """
-        print("\n🐼 Installing recommended ethPandaOps tools...")
+        print(f"\n🐼 Installing recommended {ORG_DISPLAY_NAME} tools...")
         print("=" * 60)
         
         for installer_name, recommended_tools in config.items():
@@ -362,7 +363,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             if total_errors > 0:
                 print(f"  • {total_errors} errors encountered")
         
-        print("\n🎉 Your environment is now configured with the recommended ethPandaOps tools!")
+        print(f"\n🎉 Your environment is now configured with the recommended {ORG_DISPLAY_NAME} tools!")
         print("\nPress any key to continue...")
     
     def _create_installation_result(self, results: Dict[str, Any]) -> InstallationResult:
@@ -497,7 +498,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             }
             
     def _remove_non_recommended_tools(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Remove ethPandaOps tools that are not in the recommended set.
+        """Remove {ORG_DISPLAY_NAME} tools that are not in the recommended set.
         
         Args:
             config: Loaded configuration dictionary
@@ -511,7 +512,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
         }
         
         # Default safety settings
-        ethpandaops_markers = ['ethpandaops', 'ai-cookbook', 'pandaops-cookbook']
+        org_markers = [ORG_NAME, 'ai-cookbook', 'pandaops-cookbook']
         protected_patterns = ['user-custom', 'project-specific', 'local-override']
         
         print("\n🔍 Checking for non-recommended tools to remove...")
@@ -528,7 +529,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
                 
                 # Remove non-recommended hooks from global
                 for hook_name in installed_global - recommended:
-                    if self._is_ethpandaops_tool(hook_name, ethpandaops_markers, protected_patterns):
+                    if self._is_ethpandaops_tool(hook_name, org_markers, protected_patterns):
                         try:
                             print(f"  🗑️  Removing {hook_name} (global hook)...")
                             installer.set_mode('global')
@@ -546,7 +547,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
                 
                 # Remove non-recommended hooks from local
                 for hook_name in installed_local - recommended:
-                    if self._is_ethpandaops_tool(hook_name, ethpandaops_markers, protected_patterns):
+                    if self._is_ethpandaops_tool(hook_name, org_markers, protected_patterns):
                         try:
                             print(f"  🗑️  Removing {hook_name} (local hook)...")
                             installer.set_mode('local')
@@ -567,7 +568,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
                 
                 # Remove non-recommended tools
                 for tool_name in installed - recommended:
-                    if self._is_ethpandaops_tool(tool_name, ethpandaops_markers, protected_patterns):
+                    if self._is_ethpandaops_tool(tool_name, org_markers, protected_patterns):
                         try:
                             if installer_name == 'commands':
                                 print(f"  🗑️  Removing {tool_name} (command)...")
@@ -609,12 +610,12 @@ class RecommendedToolsInstaller(InteractiveInstaller):
         
         return results
         
-    def _is_ethpandaops_tool(self, tool_name: str, ethpandaops_markers: List[str], protected_patterns: List[str]) -> bool:
-        """Check if a tool is managed by ethPandaOps and safe to remove.
+    def _is_ethpandaops_tool(self, tool_name: str, org_markers: List[str], protected_patterns: List[str]) -> bool:
+        f"""Check if a tool is managed by {ORG_DISPLAY_NAME} and safe to remove.
         
         Args:
             tool_name: Name of the tool to check
-            ethpandaops_markers: Patterns that identify ethPandaOps tools
+            org_markers: Patterns that identify {ORG_DISPLAY_NAME} tools
             protected_patterns: Patterns that identify protected tools
             
         Returns:
@@ -625,14 +626,14 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             if pattern.lower() in tool_name.lower():
                 return False
                 
-        # Check if tool is managed by ethPandaOps
-        for marker in ethpandaops_markers:
+        # Check if tool is managed by organization
+        for marker in org_markers:
             if marker.lower() in tool_name.lower():
                 return True
                 
         # Default to safe removal for known ethPandaOps tools
         # This is a conservative approach - only remove tools we're confident about
-        known_ethpandaops_tools = {
+        known_org_tools = {
             # Commands (with .md extension)
             'init-project-ai-docs.md', 'prime-context.md', 'init-component-ai-docs.md',
             'parallel-repository-tasks.md', 'create-implementation-plan.md', 
@@ -647,7 +648,7 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             'init-ai-docs.py', 'all'
         }
         
-        return tool_name in known_ethpandaops_tools
+        return tool_name in known_org_tools
         
     def build_interactive_options(self) -> None:
         """Build interactive options for recommended tools."""

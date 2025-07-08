@@ -14,7 +14,8 @@ from ..utils.file_operations import (
 )
 from ..config.settings import (
     CLAUDE_DIR, CLAUDE_STANDARDS_DIR,
-    SECTION_START_MARKER, SECTION_END_MARKER
+    SECTION_START_MARKER, SECTION_END_MARKER,
+    ORG_NAME, ORG_DISPLAY_NAME
 )
 
 # Get the project root directory (ai-cookbook)
@@ -29,7 +30,7 @@ class CodeStandardsInstaller(BaseInstaller):
         self.logger = logging.getLogger(__name__)
         super().__init__(
             name="Code Standards",
-            description="Install ethPandaOps code standards for Claude"
+            description=f"Install {ORG_DISPLAY_NAME} code standards for Claude"
         )
         self.standards_source = PROJECT_ROOT / "claude-code" / "code-standards"
         self.claude_md_path = CLAUDE_DIR / "CLAUDE.md"
@@ -44,7 +45,7 @@ class CodeStandardsInstaller(BaseInstaller):
             Dictionary with status information:
             - installed: Whether standards are fully installed
             - standards_installed: Whether standard files are in place
-            - claude_md_modified: Whether CLAUDE.md contains ethPandaOps section
+            - claude_md_modified: Whether CLAUDE.md contains {ORG_DISPLAY_NAME} section
             - installed_languages: List of installed language standards
             - config_version: Version from config.json if available
         """
@@ -383,7 +384,7 @@ class CodeStandardsInstaller(BaseInstaller):
         return None
         
     def _generate_claude_md_section(self, languages: Optional[List[str]] = None) -> str:
-        """Generate the ethPandaOps section for CLAUDE.md based on installed languages.
+        """Generate the {ORG_DISPLAY_NAME} section for CLAUDE.md based on installed languages.
         
         Args:
             languages: List of languages to include, or None to use installed languages
@@ -411,23 +412,23 @@ class CodeStandardsInstaller(BaseInstaller):
         for lang in sorted(languages):
             extensions = language_extensions.get(lang, f'*.{lang}')
             display_name = lang.title() if lang != 'tailwindcss' else 'Tailwind'
-            language_lines.append(f"- **{display_name}** ({extensions}): ~/.claude/ethpandaops/code-standards/{lang}/CLAUDE.md")
+            language_lines.append(f"- **{display_name}** ({extensions}): ~/.claude/{ORG_NAME}/code-standards/{lang}/CLAUDE.md")
         
         section_content = f"""
 
 {SECTION_START_MARKER}
-# ethpandaops
+# {ORG_NAME}
 
 When making changes to supported file types, you MUST read the local coding standards from the ai-cookbook repository and apply them:
 {chr(10).join(language_lines)}
-Use the Read tool to load these standards from ~/.claude/ethpandaops/code-standards/.
-After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps 🐼 code standards for [language]"
+Use the Read tool to load these standards from ~/.claude/{ORG_NAME}/code-standards/.
+After loading the standards, you should briefly mention "Loaded 🐼 {ORG_DISPLAY_NAME} 🐼 code standards for [language]"
 {SECTION_END_MARKER}
 """
         return section_content
     
     def _update_claude_md_section(self) -> InstallationResult:
-        """Update the ethPandaOps section in CLAUDE.md based on currently installed languages.
+        """Update the {ORG_DISPLAY_NAME} section in CLAUDE.md based on currently installed languages.
         
         Returns:
             InstallationResult indicating success/failure
@@ -456,7 +457,7 @@ After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps
             if start_idx == -1 or end_idx == -1:
                 return InstallationResult(
                     False,
-                    "Failed to find ethPandaOps section markers in CLAUDE.md"
+                    f"Failed to find {ORG_DISPLAY_NAME} section markers in CLAUDE.md"
                 )
             
             # Get new section content
@@ -504,8 +505,8 @@ After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps
             # Extract language references
             languages = []
             import re
-            # Pattern to match lines like: - **Go** (*.go, go.mod, go.sum): ~/.claude/ethpandaops/code-standards/go/CLAUDE.md
-            pattern = r'~/.claude/ethpandaops/code-standards/([^/]+)/CLAUDE\.md'
+            # Pattern to match lines like: - **Go** (*.go, go.mod, go.sum): ~/.claude/{ORG_NAME}/code-standards/go/CLAUDE.md
+            pattern = rf'~/.claude/{ORG_NAME}/code-standards/([^/]+)/CLAUDE\.md'
             matches = re.findall(pattern, section_content)
             
             return list(set(matches))  # Remove duplicates
@@ -540,7 +541,7 @@ After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps
             )
     
     def _check_claude_md_modified(self) -> bool:
-        """Check if CLAUDE.md contains ethPandaOps section.
+        """Check if CLAUDE.md contains {ORG_DISPLAY_NAME} section.
         
         Returns:
             True if CLAUDE.md contains the section, False otherwise
@@ -555,7 +556,7 @@ After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps
             return False
             
     def _modify_claude_md(self) -> InstallationResult:
-        """Add ethPandaOps section to CLAUDE.md.
+        """Add {ORG_DISPLAY_NAME} section to CLAUDE.md.
         
         Returns:
             InstallationResult indicating success/failure
@@ -579,7 +580,7 @@ After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps
             if SECTION_START_MARKER in content and SECTION_END_MARKER in content:
                 return InstallationResult(
                     True,
-                    "CLAUDE.md already contains ethPandaOps section"
+                    f"CLAUDE.md already contains {ORG_DISPLAY_NAME} section"
                 )
             
             # Generate section based on installed languages
@@ -601,7 +602,7 @@ After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps
             )
             
     def _remove_claude_md_section(self) -> InstallationResult:
-        """Remove ethPandaOps section from CLAUDE.md.
+        """Remove {ORG_DISPLAY_NAME} section from CLAUDE.md.
         
         Returns:
             InstallationResult indicating success/failure
