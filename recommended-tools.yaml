@@ -20,6 +20,7 @@ code_standards:
 
 # Essential development hooks for automated code quality
 hooks:
+  - ast-grep
   - eslint
   - gofmt
   - golangci-lint

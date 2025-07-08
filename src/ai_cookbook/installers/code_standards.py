@@ -1,5 +1,6 @@
 """Code standards installer for PandaOps Cookbook."""
 
+import logging
 import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -11,27 +12,30 @@ from ..utils.file_operations import (
     list_files, remove_directory, read_json_file,
     file_exists, read_text_file, write_text_file
 )
-from ..config.settings import CLAUDE_DIR, CLAUDE_STANDARDS_DIR
+from ..config.settings import (
+    CLAUDE_DIR, CLAUDE_STANDARDS_DIR,
+    SECTION_START_MARKER, SECTION_END_MARKER
+)
 
 # Get the project root directory (ai-cookbook)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
-# Markers for the ethPandaOps section in CLAUDE.md
-SECTION_START_MARKER = "<!-- ETHPANDAOPS_STANDARDS_START -->"
-SECTION_END_MARKER = "<!-- ETHPANDAOPS_STANDARDS_END -->"
 
 
 class CodeStandardsInstaller(BaseInstaller):
     """Installer for Claude code standards integration."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize code standards installer."""
+        self.logger = logging.getLogger(__name__)
         super().__init__(
             name="Code Standards",
             description="Install ethPandaOps code standards for Claude"
         )
         self.standards_source = PROJECT_ROOT / "claude-code" / "code-standards"
         self.claude_md_path = CLAUDE_DIR / "CLAUDE.md"
+        
+        # Initialize update detector
+        self.initialize_update_detector(self.standards_source, CLAUDE_STANDARDS_DIR)
         
     def check_status(self) -> Dict[str, Any]:
         """Check installation status of code standards.
@@ -60,7 +64,8 @@ class CodeStandardsInstaller(BaseInstaller):
                 try:
                     config = read_json_file(config_path)
                     config_version = config.get("version")
-                except Exception:
+                except Exception as e:
+                    self.logger.warning(f"Failed to read config.json: {e}")
                     pass
         
         # Get available languages from source
@@ -157,14 +162,21 @@ class CodeStandardsInstaller(BaseInstaller):
             # Copy specific language files
             copy_files(language_source, language_target)
             
-            # Ensure CLAUDE.md modification only once
-            if not self._check_claude_md_modified():
-                claude_md_result = self._modify_claude_md()
-                if not claude_md_result.success:
-                    # Rollback language installation if CLAUDE.md modification fails
-                    if language_target.exists():
-                        shutil.rmtree(language_target)
-                    return claude_md_result
+            # Update metadata for each file
+            if self.update_detector:
+                for file_path in language_source.rglob('*'):
+                    if file_path.is_file():
+                        rel_path = file_path.relative_to(language_source)
+                        target_file_name = language / rel_path
+                        self.update_detector.update_metadata(str(target_file_name), file_path)
+            
+            # Update CLAUDE.md to reflect installed languages
+            claude_md_result = self._update_claude_md_section()
+            if not claude_md_result.success:
+                # Rollback language installation if CLAUDE.md modification fails
+                if language_target.exists():
+                    shutil.rmtree(language_target)
+                return claude_md_result
             
             details = {
                 'language': language,
@@ -218,6 +230,9 @@ class CodeStandardsInstaller(BaseInstaller):
             
             # Remove language directory
             shutil.rmtree(language_target)
+            
+            # Update CLAUDE.md to reflect remaining languages
+            self._update_claude_md_section()
             
             # Check if we should remove CLAUDE.md section
             remaining_languages = self._get_installed_languages()
@@ -362,10 +377,168 @@ class CodeStandardsInstaller(BaseInstaller):
         if file_exists(config_path):
             try:
                 return read_json_file(config_path)
-            except Exception:
+            except Exception as e:
+                self.logger.warning(f"Failed to read config at {config_path}: {e}")
                 return None
         return None
         
+    def _generate_claude_md_section(self, languages: Optional[List[str]] = None) -> str:
+        """Generate the ethPandaOps section for CLAUDE.md based on installed languages.
+        
+        Args:
+            languages: List of languages to include, or None to use installed languages
+            
+        Returns:
+            Section content as a string
+        """
+        if languages is None:
+            languages = self._get_installed_languages()
+        
+        if not languages:
+            # No languages installed, return empty section
+            return f"\n\n{SECTION_START_MARKER}\n{SECTION_END_MARKER}\n"
+        
+        # Language file extensions mapping
+        language_extensions = {
+            'go': '*.go, go.mod, go.sum',
+            'python': '*.py',
+            'rust': '*.rs, Cargo.toml, Cargo.lock',
+            'tailwind': '*.css, *.tsx, *.jsx, *.js, *.ts, *.mdx, *.html, *.vue, *.svelte, *.astro',
+            'tailwindcss': '*.css, *.tsx, *.jsx, *.js, *.ts, *.mdx, *.html, *.vue, *.svelte, *.astro'
+        }
+        
+        language_lines = []
+        for lang in sorted(languages):
+            extensions = language_extensions.get(lang, f'*.{lang}')
+            display_name = lang.title() if lang != 'tailwindcss' else 'Tailwind'
+            language_lines.append(f"- **{display_name}** ({extensions}): ~/.claude/ethpandaops/code-standards/{lang}/CLAUDE.md")
+        
+        section_content = f"""
+
+{SECTION_START_MARKER}
+# ethpandaops
+
+When making changes to supported file types, you MUST read the local coding standards from the ai-cookbook repository and apply them:
+{chr(10).join(language_lines)}
+Use the Read tool to load these standards from ~/.claude/ethpandaops/code-standards/.
+After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps 🐼 code standards for [language]"
+{SECTION_END_MARKER}
+"""
+        return section_content
+    
+    def _update_claude_md_section(self) -> InstallationResult:
+        """Update the ethPandaOps section in CLAUDE.md based on currently installed languages.
+        
+        Returns:
+            InstallationResult indicating success/failure
+        """
+        try:
+            if not file_exists(self.claude_md_path):
+                return self._modify_claude_md()
+            
+            # Read current content
+            content = read_text_file(self.claude_md_path)
+            
+            # Check if section exists
+            if SECTION_START_MARKER not in content or SECTION_END_MARKER not in content:
+                return self._modify_claude_md()
+            
+            # Back up existing CLAUDE.md
+            backup_path = self.backup_manager.create_backup(
+                self.claude_md_path,
+                "CLAUDE_md_update"
+            )
+            
+            # Find and replace the section
+            start_idx = content.find(SECTION_START_MARKER)
+            end_idx = content.find(SECTION_END_MARKER) + len(SECTION_END_MARKER)
+            
+            if start_idx == -1 or end_idx == -1:
+                return InstallationResult(
+                    False,
+                    "Failed to find ethPandaOps section markers in CLAUDE.md"
+                )
+            
+            # Get new section content
+            new_section = self._generate_claude_md_section()
+            
+            # Replace the section
+            new_content = content[:start_idx].rstrip() + new_section + content[end_idx:].lstrip()
+            
+            # Write updated content
+            write_text_file(self.claude_md_path, new_content)
+            
+            return InstallationResult(
+                True,
+                "CLAUDE.md updated successfully",
+                {'backup_created': str(backup_path)}
+            )
+            
+        except Exception as e:
+            return InstallationResult(
+                False,
+                f"Failed to update CLAUDE.md: {str(e)}"
+            )
+    
+    def _get_claude_md_languages(self) -> List[str]:
+        """Get list of languages mentioned in CLAUDE.md.
+        
+        Returns:
+            List of language names found in CLAUDE.md
+        """
+        if not file_exists(self.claude_md_path):
+            return []
+        
+        try:
+            content = read_text_file(self.claude_md_path)
+            
+            # Find the ethPandaOps section
+            start_idx = content.find(SECTION_START_MARKER)
+            end_idx = content.find(SECTION_END_MARKER)
+            
+            if start_idx == -1 or end_idx == -1:
+                return []
+            
+            section_content = content[start_idx:end_idx]
+            
+            # Extract language references
+            languages = []
+            import re
+            # Pattern to match lines like: - **Go** (*.go, go.mod, go.sum): ~/.claude/ethpandaops/code-standards/go/CLAUDE.md
+            pattern = r'~/.claude/ethpandaops/code-standards/([^/]+)/CLAUDE\.md'
+            matches = re.findall(pattern, section_content)
+            
+            return list(set(matches))  # Remove duplicates
+            
+        except Exception:
+            return []
+    
+    def sync_claude_md_with_installed(self) -> InstallationResult:
+        """Synchronize CLAUDE.md with actually installed languages.
+        
+        Returns:
+            InstallationResult indicating success/failure
+        """
+        try:
+            installed_languages = self._get_installed_languages()
+            claude_md_languages = self._get_claude_md_languages()
+            
+            # Check if they match
+            if set(installed_languages) == set(claude_md_languages):
+                return InstallationResult(
+                    True,
+                    "CLAUDE.md is already synchronized with installed languages"
+                )
+            
+            # Update CLAUDE.md to match installed languages
+            return self._update_claude_md_section()
+            
+        except Exception as e:
+            return InstallationResult(
+                False,
+                f"Failed to sync CLAUDE.md: {str(e)}"
+            )
+    
     def _check_claude_md_modified(self) -> bool:
         """Check if CLAUDE.md contains ethPandaOps section.
         
@@ -409,19 +582,8 @@ class CodeStandardsInstaller(BaseInstaller):
                     "CLAUDE.md already contains ethPandaOps section"
                 )
             
-            # Create the section content
-            section_content = f"""
-
-{SECTION_START_MARKER}
-# ethpandaops
-
-When making changes to supported file types, you MUST read the local coding standards from the ai-cookbook repository and apply them:
-- **Go** (*.go, go.mod, go.sum): ~/.claude/ethpandaops/code-standards/go/CLAUDE.md
-- **Python** (*.py): ~/.claude/ethpandaops/code-standards/python/CLAUDE.md
-Use the Read tool to load these standards from ~/.claude/ethpandaops/code-standards/.
-After loading the standards, you should briefly mention "Loaded 🐼 ethPandaOps 🐼 code standards for [language]"
-{SECTION_END_MARKER}
-"""
+            # Generate section based on installed languages
+            section_content = self._generate_claude_md_section()
             
             # Append the section to the file
             write_text_file(self.claude_md_path, content + section_content)

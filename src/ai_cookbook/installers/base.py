@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Any, Callable
 from ..utils.backup import BackupManager
 from ..utils.file_operations import ensure_directory
 from ..config.settings import CLAUDE_DIR
+from ..updaters.detector import UpdateDetector, UpdateStatus
 
 
 class InstallationResult:
@@ -13,7 +14,7 @@ class InstallationResult:
     including any relevant details for debugging or user information.
     """
     
-    def __init__(self, success: bool, message: str, details: Dict[str, Any] = None):
+    def __init__(self, success: bool, message: str, details: Dict[str, Any] = None) -> None:
         """Initialize installation result.
         
         Args:
@@ -37,7 +38,7 @@ class BaseInstaller(ABC):
     must implement. This ensures consistency across different installer types.
     """
     
-    def __init__(self, name: str, description: str):
+    def __init__(self, name: str, description: str) -> None:
         """Initialize base installer.
         
         Args:
@@ -47,6 +48,7 @@ class BaseInstaller(ABC):
         self.name = name
         self.description = description
         self.backup_manager = BackupManager()
+        self.update_detector: Optional[UpdateDetector] = None
         
     @abstractmethod
     def check_status(self) -> Dict[str, Any]:
@@ -122,6 +124,25 @@ class BaseInstaller(ABC):
         """
         # Ensure base Claude directory exists
         ensure_directory(CLAUDE_DIR)
+    
+    def check_updates(self) -> Optional[UpdateStatus]:
+        """Check for available updates.
+        
+        Returns:
+            UpdateStatus if update detector is configured, None otherwise
+        """
+        if self.update_detector:
+            return self.update_detector.check_updates(installed_only=True)
+        return None
+    
+    def initialize_update_detector(self, source_path: Path, install_path: Path) -> None:
+        """Initialize update detector for this installer.
+        
+        Args:
+            source_path: Path to source files in repo
+            install_path: Path to installed files
+        """
+        self.update_detector = UpdateDetector(source_path, install_path)
 
 
 class InteractiveInstaller(BaseInstaller):
@@ -131,7 +152,7 @@ class InteractiveInstaller(BaseInstaller):
     that need more granular control (like the hooks installer).
     """
     
-    def __init__(self, name: str, description: str):
+    def __init__(self, name: str, description: str) -> None:
         """Initialize interactive installer.
         
         Args:

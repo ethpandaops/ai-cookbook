@@ -10,13 +10,14 @@ import tty
 import select
 import signal
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable, Any
 
 from .installers.commands import CommandsInstaller
 from .installers.code_standards import CodeStandardsInstaller
 from .installers.hooks import HooksInstaller
 from .installers.scripts import ScriptsInstaller
 from .installers.recommended import RecommendedToolsInstaller
+from .installers.uninstall_all import UninstallAllInstaller
 
 # ANSI color codes
 class Colors:
@@ -39,7 +40,7 @@ class Colors:
 # Global state
 terminal_resized = False
 
-def signal_handler(signum, frame):
+def signal_handler(signum: int, frame: Any) -> None:
     """Handle terminal resize"""
     global terminal_resized
     terminal_resized = True
@@ -91,21 +92,73 @@ def getch(timeout=None):
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-def clear_screen():
+def clear_screen() -> None:
     """Clear the terminal screen"""
     print("\033[2J\033[H", end='')
 
-def get_installers():
+def get_installers() -> Dict[str, Any]:
     """Get all installer instances"""
     return {
         'recommended': RecommendedToolsInstaller(),
         'commands': CommandsInstaller(),
         'code-standards': CodeStandardsInstaller(), 
         'hooks': HooksInstaller(),
-        'scripts': ScriptsInstaller()
+        'scripts': ScriptsInstaller(),
+        'uninstall': UninstallAllInstaller()
     }
 
-def draw_menu(installer_names: List[str], selected: int, installers: Dict, show_details: bool = False):
+def draw_base_menu(
+    title: str,
+    items: List[str],
+    selected: int,
+    get_item_status: Callable[[str], str],
+    get_item_display: Callable[[str, bool], str],
+    header_info: Optional[Dict[str, str]] = None,
+    show_details: bool = False,
+    detail_func: Optional[Callable[[str, bool], None]] = None
+) -> None:
+    """Base menu drawing function for all submenus.
+    
+    Args:
+        title: Menu title to display
+        items: List of items to display
+        selected: Index of currently selected item
+        get_item_status: Function to get status text for an item
+        get_item_display: Function to get display text for an item
+        header_info: Optional additional header information
+        show_details: Whether to show details for selected item
+        detail_func: Optional function to display item details
+    """
+    print(Colors.HIDE_CURSOR, end='')
+    clear_screen()
+    
+    # Header
+    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 {title}{Colors.NC}")
+    
+    # Additional header info
+    if header_info:
+        for key, value in header_info.items():
+            print(f"{key}: {value}")
+    
+    print(f"Available Items: {len(items)}\n")
+    
+    # Draw items
+    for i, item in enumerate(items):
+        is_selected = i == selected
+        status = get_item_status(item)
+        display = get_item_display(item, is_selected)
+        
+        # Selection indicator and item display
+        if is_selected:
+            print(f"{Colors.CYAN}→{Colors.NC} {display} {status}")
+            
+            if show_details and detail_func:
+                detail_func(item, True)
+                print()
+        else:
+            print(f"  {display} {status}")
+
+def draw_menu(installer_names: List[str], selected: int, installers: Dict[str, Any], show_details: bool = False) -> None:
     """Draw the interactive menu"""
     print(Colors.HIDE_CURSOR, end='')
     
@@ -116,65 +169,70 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict, show_
     print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 ethPandaOps AI Cookbook Installer{Colors.NC}")
     print(f"Version: {Colors.GREEN}v1.0.0{Colors.NC}\n")
     
-    # Quick Setup section
-    print(f"{Colors.BOLD}Quick Setup{Colors.NC}")
-    print(f"{Colors.DIM}One-click configuration for the team{Colors.NC}")
+    # Draw each section based on the installer type
+    current_section = None
     
-    # Show recommended installer first
-    recommended_installer = installers['recommended']
-    is_recommended_selected = selected == 0
-    
-    if is_recommended_selected:
-        print(f" 🎯 {Colors.REVERSE}{recommended_installer.name:<80}{Colors.NC}")
-    else:
-        print(f" 🎯 {recommended_installer.name:<80}")
-    
-    # Tools section
-    print(f"\n{Colors.BOLD}Tools{Colors.NC}")
-    print(f"{Colors.DIM}Individual component management{Colors.NC}")
-    
-    # Show other installers
-    tool_installers = [name for name in installer_names if name != 'recommended']
-    for i, name in enumerate(tool_installers):
+    for idx, name in enumerate(installer_names):
         installer = installers[name]
-        # Adjust selection index (add 1 because recommended is index 0)
-        is_selected = (i + 1) == selected
+        is_selected = idx == selected
         
-        # Selection indicator for tools (no descriptions or status)
-        if is_selected:
-            print(f"   {Colors.REVERSE}{installer.name:<80}{Colors.NC}")
-            
-            if show_details:
-                # Show additional details for selected component
-                details = installer.get_details()
-                print(f"\n{Colors.DIM}     Description: {Colors.NC}{installer.description}")
+        # Add section headers
+        if name == 'recommended' and current_section != 'quick':
+            current_section = 'quick'
+            print(f"{Colors.BOLD}Quick Setup{Colors.NC}")
+            print(f"{Colors.DIM}One-click configuration for the team{Colors.NC}")
+        elif name in ['commands', 'code-standards', 'hooks', 'scripts'] and current_section != 'tools':
+            current_section = 'tools'
+            print(f"\n{Colors.BOLD}Tools{Colors.NC}")
+            print(f"{Colors.DIM}Individual component management{Colors.NC}")
+        elif name == 'uninstall' and current_section != 'danger':
+            current_section = 'danger'
+            print(f"\n{Colors.BOLD}Danger Zone{Colors.NC}")
+            print(f"{Colors.DIM}Complete removal options{Colors.NC}")
+        
+        # Draw the menu item
+        if name == 'recommended':
+            if is_selected:
+                print(f" 🎯 {Colors.REVERSE}{installer.name:<80}{Colors.NC}")
+            else:
+                print(f" 🎯 {installer.name:<80}")
+        elif name == 'uninstall':
+            if is_selected:
+                print(f" {Colors.REVERSE}🗑  {installer.name:<77}{Colors.NC}")
+            else:
+                print(f" {Colors.RED}🗑  {installer.name:<77}{Colors.NC}")
+        else:
+            # Regular tools
+            if is_selected:
+                print(f"   {Colors.REVERSE}{installer.name:<80}{Colors.NC}")
                 
-                # Show component-specific details
-                if name == 'commands':
-                    if 'installed_commands' in details:
+                if show_details:
+                    # Show additional details for selected component
+                    details = installer.get_details()
+                    print(f"\n{Colors.DIM}     Description: {Colors.NC}{installer.description}")
+                    
+                    # Show component-specific details
+                    if name == 'commands' and 'installed_commands' in details:
                         count = len(details['installed_commands'])
                         print(f"{Colors.DIM}     Commands: {Colors.NC}{count} installed")
-                elif name == 'code-standards':
-                    if 'installed_languages' in details:
+                    elif name == 'code-standards' and 'installed_languages' in details:
                         langs = details['installed_languages']
                         if langs:
                             print(f"{Colors.DIM}     Languages: {Colors.NC}{', '.join(langs)}")
-                elif name == 'hooks':
-                    if 'global_hooks' in details and 'local_hooks' in details:
-                        global_count = len(details['global_hooks'])
-                        local_count = len(details['local_hooks'])
-                        print(f"{Colors.DIM}     Hooks: {Colors.NC}{global_count} global, {local_count} local")
-                elif name == 'scripts':
-                    if 'available_scripts' in details:
+                    elif name == 'hooks':
+                        if 'global_hooks' in details and 'local_hooks' in details:
+                            global_count = len(details['global_hooks'])
+                            local_count = len(details['local_hooks'])
+                            print(f"{Colors.DIM}     Hooks: {Colors.NC}{global_count} global, {local_count} local")
+                    elif name == 'scripts' and 'available_scripts' in details:
                         count = len(details['available_scripts'])
                         print(f"{Colors.DIM}     Scripts: {Colors.NC}{count} available")
-                
-                print()
-        else:
-            # Non-selected tools (clean, no status)
-            print(f"   {installer.name:<80}")
+                    
+                    print()
+            else:
+                print(f"   {installer.name:<80}")
     
-    # Current item description (only for tools, not recommended)
+    # Current item description
     current_installer = installers[installer_names[selected]]
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
     
@@ -191,7 +249,7 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict, show_
     print(f"  {Colors.CYAN}s{Colors.NC}       Show status")
     print(f"  {Colors.CYAN}q/←{Colors.NC}     Quit")
 
-def run_interactive():
+def run_interactive() -> None:
     """Interactive component installation with arrow key navigation"""
     global terminal_resized
     
@@ -202,7 +260,8 @@ def run_interactive():
         return
     
     installers = get_installers()
-    installer_names = list(installers.keys())
+    # Order the menu items properly: recommended, tools, then uninstall
+    installer_names = ['recommended', 'commands', 'code-standards', 'hooks', 'scripts', 'uninstall']
     
     selected = 0
     show_details = False
@@ -267,7 +326,7 @@ def run_interactive():
         print(Colors.SHOW_CURSOR)
         print()
 
-def show_status_screen(installers):
+def show_status_screen(installers: Dict[str, Any]) -> None:
     """Show detailed status screen"""
     clear_screen()
     print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 ethPandaOps AI Cookbook - Installation Status{Colors.NC}\n")
@@ -301,7 +360,7 @@ def show_status_screen(installers):
     print(f"{Colors.DIM}Press any key to return to main menu...{Colors.NC}")
     getch()
 
-def install_all_components(installers):
+def install_all_components(installers: Dict[str, Any]) -> None:
     """Install all components with progress display"""
     clear_screen()
     print(f"\n{Colors.BOLD}{Colors.CYAN}Installing All Components{Colors.NC}\n")
@@ -327,11 +386,8 @@ def install_all_components(installers):
         print(f"{Colors.BOLD}Summary: {success_count}/{total_count} components installed successfully{Colors.NC}")
     else:
         print(f"{Colors.YELLOW}All components are already installed{Colors.NC}")
-    
-    print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-    getch()
 
-def uninstall_all_components(installers):
+def uninstall_all_components(installers: Dict[str, Any]) -> None:
     """Uninstall all components with progress display"""
     clear_screen()
     print(f"\n{Colors.BOLD}{Colors.CYAN}Uninstalling All Components{Colors.NC}\n")
@@ -357,11 +413,8 @@ def uninstall_all_components(installers):
         print(f"{Colors.BOLD}Summary: {success_count}/{total_count} components uninstalled successfully{Colors.NC}")
     else:
         print(f"{Colors.YELLOW}No components were installed{Colors.NC}")
-    
-    print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-    getch()
 
-def run_component_menu(component_name: str, installer):
+def run_component_menu(component_name: str, installer: Any) -> None:
     """Run component-specific submenu"""
     global terminal_resized
     
@@ -376,34 +429,25 @@ def run_component_menu(component_name: str, installer):
             run_scripts_menu(installer)
         elif component_name == 'recommended':
             run_recommended_menu(installer)
+        elif component_name == 'uninstall':
+            run_uninstall_menu(installer)
         else:
             # Fallback - direct install/uninstall
             if installer.is_installed():
                 result = installer.uninstall()
             else:
                 result = installer.install()
-            
-            clear_screen()
-            print(f"\n{Colors.CYAN}{installer.name}{Colors.NC}\n")
-            if result.success:
-                print(f"{Colors.GREEN}✓ {result.message}{Colors.NC}")
-            else:
-                print(f"{Colors.RED}✗ {result.message}{Colors.NC}")
-            print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-            getch()
+            # Action is instant, return immediately
     except Exception as e:
-        clear_screen()
+        # Show error inline without clearing
         print(f"\n{Colors.RED}Error: {e}{Colors.NC}")
-        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-        getch()
 
-def run_hooks_menu(installer):
-    """Run hooks component submenu similar to install-hooks.py"""
+def run_hooks_menu(installer: Any) -> None:
+    """Run hooks component submenu with individual hook management"""
     global terminal_resized
     
-    # Get available hooks from the installer
-    details = installer.get_details()
-    available_hooks = details.get('available_hooks', [])
+    # Get available hooks
+    available_hooks = installer.get_available_hooks()
     
     if not available_hooks:
         clear_screen()
@@ -412,11 +456,8 @@ def run_hooks_menu(installer):
         getch()
         return
     
-    # Ask for installation mode first (like install-hooks.py)
-    mode = select_hooks_mode()
-    if mode is None:
-        return  # User cancelled
-    
+    # Start in global mode by default
+    mode = "global"
     installer.set_mode(mode)
     
     selected = 0
@@ -454,225 +495,161 @@ def run_hooks_menu(installer):
             elif key == 'd':
                 show_details = not show_details
                 force_redraw = True
-            elif key == 'm':  # Change mode
-                new_mode = select_hooks_mode()
-                if new_mode:
-                    mode = new_mode
-                    installer.set_mode(mode)
+            elif key == 'm':  # Toggle mode
+                mode = "local" if mode == "global" else "global"
+                installer.set_mode(mode)
                 force_redraw = True
             elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
                 selected_hook = available_hooks[selected]
-                
-                # Toggle installation for selected hook
                 details = installer.get_details()
-                global_hooks = details.get('global_hooks', [])
-                local_hooks = details.get('local_hooks', [])
                 
-                if selected_hook in global_hooks or selected_hook in local_hooks:
-                    # Uninstall hook - determine which mode it's installed in
-                    if selected_hook in global_hooks and selected_hook in local_hooks:
-                        # Installed in both - uninstall from current mode
-                        result = installer.uninstall_hook(selected_hook, mode)
-                    elif selected_hook in global_hooks:
-                        result = installer.uninstall_hook(selected_hook, "global")
-                    else:
-                        result = installer.uninstall_hook(selected_hook, "local")
+                if mode == "global":
+                    installed_hooks = details.get('global_hooks', [])
                 else:
-                    # Install hook in current mode
+                    installed_hooks = details.get('local_hooks', [])
+                
+                if selected_hook in installed_hooks:
+                    # Uninstall hook
+                    result = installer.uninstall_hook(selected_hook, mode)
+                else:
+                    # Install hook
                     result = installer.install_hook(selected_hook, mode)
                 
-                # Show result briefly
-                if result:
-                    show_operation_result(result, selected_hook, "install" if selected_hook not in global_hooks and selected_hook not in local_hooks else "uninstall")
+                # Show error if installation failed
+                if not result.success:
+                    print(f"\n{Colors.RED}Error: {result.message}{Colors.NC}")
+                    if result.details:
+                        print(f"{Colors.DIM}Details: {result.details}{Colors.NC}")
+                    print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+                    getch()
                 
                 force_redraw = True
             elif key == 'a':  # Install all
                 results = []
+                details = installer.get_details()
+                installed_hooks = details.get(f'{mode}_hooks', [])
+                
                 for hook in available_hooks:
-                    details = installer.get_details()
-                    global_hooks = details.get('global_hooks', [])
-                    local_hooks = details.get('local_hooks', [])
-                    if hook not in global_hooks and hook not in local_hooks:
+                    if hook not in installed_hooks:
                         result = installer.install_hook(hook, mode)
                         results.append((hook, result))
-                show_batch_results(results, "install")
+                
                 force_redraw = True
             elif key == 'r':  # Remove all
                 results = []
                 details = installer.get_details()
-                all_installed = set(details.get('global_hooks', [])) | set(details.get('local_hooks', []))
-                for hook in all_installed:
-                    # Determine which mode to uninstall from
-                    hook_mode = mode if hook in details.get(f'{mode}_hooks', []) else ("global" if hook in details.get('global_hooks', []) else "local")
-                    result = installer.uninstall_hook(hook, hook_mode)
+                installed_hooks = details.get(f'{mode}_hooks', [])
+                
+                for hook in installed_hooks:
+                    result = installer.uninstall_hook(hook, mode)
                     results.append((hook, result))
-                show_batch_results(results, "uninstall")
+                
                 force_redraw = True
     except KeyboardInterrupt:
         pass
     finally:
         print(Colors.SHOW_CURSOR)
 
-def select_hooks_mode():
-    """Ask user to select installation mode for hooks"""
-    global terminal_resized
-    selected = 0  # Default to global
-    force_redraw = True
-    
-    try:
-        while True:
-            if terminal_resized:
-                terminal_resized = False
-                force_redraw = True
-            
-            if force_redraw:
-                print(Colors.HIDE_CURSOR)
-                clear_screen()
-                
-                print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 Select Hooks Installation Mode{Colors.NC}\n")
-                
-                # Global option
-                if selected == 0:
-                    print(f"{Colors.REVERSE}{Colors.BOLD} ► Global {Colors.NC}")
-                    print(f"   {Colors.GREEN}Install hooks for all projects{Colors.NC}")
-                    print(f"   {Colors.DIM}~/.claude/settings.json{Colors.NC}")
-                else:
-                    print(f"   {Colors.BOLD}Global{Colors.NC}")
-                    print(f"   {Colors.DIM}Install hooks for all projects{Colors.NC}")
-                    print(f"   {Colors.DIM}~/.claude/settings.json{Colors.NC}")
-                
-                print()
-                
-                # Local option
-                if selected == 1:
-                    print(f"{Colors.REVERSE}{Colors.BOLD} ► Local {Colors.NC}")
-                    print(f"   {Colors.BLUE}Install hooks for current directory only{Colors.NC}")
-                    print(f"   {Colors.DIM}.claude/settings.local.json{Colors.NC}")
-                else:
-                    print(f"   {Colors.BOLD}Local{Colors.NC}")
-                    print(f"   {Colors.DIM}Install hooks for current directory only{Colors.NC}")
-                    print(f"   {Colors.DIM}.claude/settings.local.json{Colors.NC}")
-                
-                print()
-                print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Select  q/←: Cancel{Colors.NC}")
-                
-                force_redraw = False
-            
-            key = getch(timeout=0.1)
-            
-            if key is None:
-                if terminal_resized:
-                    continue
-            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
-                print(Colors.SHOW_CURSOR)
-                return None
-            elif key == 'UP' and selected > 0:
-                selected = 0
-                force_redraw = True
-            elif key == 'DOWN' and selected < 1:
-                selected = 1
-                force_redraw = True
-            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
-                print(Colors.SHOW_CURSOR)
-                return "global" if selected == 0 else "local"
-                    
-    except KeyboardInterrupt:
-        print(Colors.SHOW_CURSOR)
-        return None
 
-def show_operation_result(result, item_name, operation):
-    """Show result of a single operation"""
-    if result.success:
-        print(f"\n{Colors.GREEN}✓ {operation.title()}ed {item_name}: {result.message}{Colors.NC}")
-    else:
-        print(f"\n{Colors.RED}✗ Failed to {operation} {item_name}: {result.message}{Colors.NC}")
-    print(f"{Colors.DIM}Press any key to continue...{Colors.NC}")
-    getch()
-
-def show_batch_results(results, operation):
-    """Show results of batch operations"""
-    clear_screen()
-    print(f"\n{Colors.BOLD}{Colors.CYAN}Batch {operation.title()} Results{Colors.NC}\n")
-    
-    successful = 0
-    for item_name, result in results:
-        if result.success:
-            print(f"{Colors.GREEN}✓ {item_name}: {result.message}{Colors.NC}")
-            successful += 1
-        else:
-            print(f"{Colors.RED}✗ {item_name}: {result.message}{Colors.NC}")
-    
-    total = len(results)
-    if total > 0:
-        print(f"\n{Colors.BOLD}Summary: {successful}/{total} operations successful{Colors.NC}")
-    
-    print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-    getch()
-
-def draw_hooks_menu(hooks: list, selected: int, installer, show_details: bool = False, mode: str = "global"):
+def draw_hooks_menu(hooks: List[str], selected: int, installer: Any, show_details: bool = False, mode: str = "global") -> None:
     """Draw the hooks submenu"""
-    print(Colors.HIDE_CURSOR, end='')
-    clear_screen()
-    
-    # Get current hook status
+    # Get current installation status
     details = installer.get_details()
     global_hooks = details.get('global_hooks', [])
     local_hooks = details.get('local_hooks', [])
     
-    # Header
-    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 Claude Code Hooks{Colors.NC}")
-    mode_display = f"{Colors.GREEN}[GLOBAL]{Colors.NC}" if mode == "global" else f"{Colors.BLUE}[LOCAL]{Colors.NC}"
-    print(f"Mode: {mode_display} | Available Hooks: {len(hooks)}\n")
+    # Calculate maximum hook name length for alignment
+    max_hook_length = max(len(hook) for hook in hooks) if hooks else 30
+    max_hook_length = max(max_hook_length, 20)  # Ensure minimum width
     
-    # Hooks list
-    for i, hook in enumerate(hooks):
-        is_selected = i == selected
+    def get_item_status(hook: str) -> str:
         is_global = hook in global_hooks
         is_local = hook in local_hooks
         
-        # Get hook description
+        # Build status indicators
+        status_parts = []
+        if is_global:
+            status_parts.append(f"{Colors.CYAN}[GLOBAL]{Colors.NC}")
+        if is_local:
+            status_parts.append(f"{Colors.GREEN}[LOCAL]{Colors.NC}")
+        return " ".join(status_parts) if status_parts else f"{Colors.GRAY}[NOT INSTALLED]{Colors.NC}"
+    
+    def get_item_display(hook: str, is_selected: bool) -> str:
+        # Determine if installed in current mode
+        if mode == "global":
+            is_installed = hook in global_hooks
+        else:
+            is_installed = hook in local_hooks
+        
+        prefix = f"{Colors.GREEN}✓{Colors.NC} " if is_installed else "  "
+        
+        if is_selected:
+            return f"{prefix}{Colors.REVERSE}{hook:<{max_hook_length}}{Colors.NC}"
+        else:
+            if is_installed:
+                return f"{prefix}{hook:<{max_hook_length}}"
+            else:
+                return f"{prefix}{Colors.DIM}{hook:<{max_hook_length}}{Colors.NC}"
+    
+    def show_hook_details(hook: str, is_installed: bool) -> None:
         hook_info = installer.get_hook_info(hook)
         desc = hook_info.get('description', 'No description available')
-        if len(desc) > 50:
-            desc = desc[:47] + "..."
+        print(f"\n{Colors.DIM}     {desc}{Colors.NC}")
+        print(f"{Colors.DIM}     Type: {hook_info.get('hook_type', 'PostToolUse')}{Colors.NC}")
+        print(f"{Colors.DIM}     Matcher: {hook_info.get('matcher', 'No matcher')}{Colors.NC}")
         
-        # Selection indicator
-        if is_selected:
-            if is_global and is_local:
-                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{hook:<20} {desc:<50}{Colors.NC} {Colors.GREEN}[GLOBAL, LOCAL]{Colors.NC}")
-            elif is_global:
-                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{hook:<20} {desc:<50}{Colors.NC} {Colors.GREEN}[GLOBAL]{Colors.NC}")
-            elif is_local:
-                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{hook:<20} {desc:<50}{Colors.NC} {Colors.GREEN}[LOCAL]{Colors.NC}")
-            else:
-                print(f"   {Colors.REVERSE}{hook:<20} {desc:<50}{Colors.NC} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
-            
-            if show_details:
-                print(f"\n{Colors.DIM}     Description: {Colors.NC}{hook_info.get('description', 'No description')}")
-                print(f"{Colors.DIM}     Hook Type: {Colors.NC}{hook_info.get('hook_type', 'PostToolUse')}")
-                print(f"{Colors.DIM}     Matcher: {Colors.NC}{hook_info.get('matcher', 'No matcher')}")
-                print()
-        else:
-            if is_global and is_local:
-                print(f" {Colors.GREEN}✓{Colors.NC} {hook:<20} {desc:<50} {Colors.GREEN}[GLOBAL, LOCAL]{Colors.NC}")
-            elif is_global:
-                print(f" {Colors.GREEN}✓{Colors.NC} {hook:<20} {desc:<50} {Colors.GREEN}[GLOBAL]{Colors.NC}")
-            elif is_local:
-                print(f" {Colors.GREEN}✓{Colors.NC} {hook:<20} {desc:<50} {Colors.GREEN}[LOCAL]{Colors.NC}")
-            else:
-                print(f"   {Colors.DIM}{hook:<20} {desc:<50} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
+        # Check if installed in current mode
+        if mode == "global" and hook in global_hooks:
+            hooks_dir = installer._get_hooks_dir(mode)
+            print(f"{Colors.DIM}     Location: {hooks_dir}/{hook}.sh{Colors.NC}")
+        elif mode == "local" and hook in local_hooks:
+            hooks_dir = installer._get_hooks_dir(mode)
+            print(f"{Colors.DIM}     Location: {hooks_dir}/{hook}.sh{Colors.NC}")
+    
+    # Header info
+    mode_color = Colors.GREEN if mode == "global" else Colors.BLUE
+    header_info = {
+        "Mode": f"{mode_color}[{mode.upper()}]{Colors.NC} (press 'm' to toggle)"
+    }
+    
+    draw_base_menu(
+        title="Claude Code Hooks",
+        items=hooks,
+        selected=selected,
+        get_item_status=get_item_status,
+        get_item_display=get_item_display,
+        header_info=header_info,
+        show_details=show_details,
+        detail_func=show_hook_details
+    )
     
     # Footer
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
     selected_hook = hooks[selected]
-    if selected_hook in global_hooks or selected_hook in local_hooks:
-        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_hook}'{Colors.NC}")
-    else:
-        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_hook}'{Colors.NC}")
     
-    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  m: Change Mode  q/←: Back{Colors.NC}")
+    if mode == "global":
+        is_installed = selected_hook in global_hooks
+    else:
+        is_installed = selected_hook in local_hooks
+    
+    if is_installed:
+        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_hook}' from {mode}{Colors.NC}")
+    else:
+        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_hook}' in {mode} mode{Colors.NC}")
+    
+    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  m: Toggle Mode  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
 
-def run_commands_menu(installer):
+
+def show_operation_result(result: Any, item_name: str, operation: str) -> None:
+    """Show result of a single operation"""
+    # Operations are now instant - no need to show result
+
+def show_batch_results(results: Any, operation: str) -> None:
+    """Show results of batch operations"""
+    # Batch operations are now instant - no need to show results
+
+
+def run_commands_menu(installer: Any) -> None:
     """Run commands component submenu with individual command management"""
     global terminal_resized
     
@@ -765,46 +742,50 @@ def run_commands_menu(installer):
     finally:
         print(Colors.SHOW_CURSOR)
 
-def draw_commands_menu(commands: list, selected: int, installer, show_details: bool = False):
+def draw_commands_menu(commands: List[str], selected: int, installer: Any, show_details: bool = False) -> None:
     """Draw the commands submenu"""
-    print(Colors.HIDE_CURSOR, end='')
-    clear_screen()
-    
     # Get current installation status
     status = installer.check_status()
     installed_commands = status.get('installed_commands', [])
-    
-    # Header
-    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 Claude Commands{Colors.NC}")
-    print(f"Available Commands: {len(commands)}\n")
     
     # Calculate maximum command name length for alignment
     max_cmd_length = max(len(cmd) for cmd in commands) if commands else 30
     max_cmd_length = max(max_cmd_length, 35)  # Ensure minimum width
     
-    # Commands list
-    for i, command in enumerate(commands):
-        is_selected = i == selected
+    def get_item_status(command: str) -> str:
         is_installed = command in installed_commands
+        if is_installed:
+            return f"{Colors.GREEN}[INSTALLED]{Colors.NC}"
+        else:
+            return f"{Colors.GRAY}[NOT INSTALLED]{Colors.NC}"
+    
+    def get_item_display(command: str, is_selected: bool) -> str:
+        is_installed = command in installed_commands
+        prefix = f"{Colors.GREEN}✓{Colors.NC} " if is_installed else "  "
         
-        # Selection indicator
         if is_selected:
-            if is_installed:
-                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{command:<{max_cmd_length}}{Colors.NC} {Colors.GREEN}[INSTALLED]{Colors.NC}")
-            else:
-                print(f"   {Colors.REVERSE}{command:<{max_cmd_length}}{Colors.NC} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
-            
-            if show_details:
-                print(f"\n{Colors.DIM}     Claude command template for automation{Colors.NC}")
-                if is_installed:
-                    target_dir = status.get('commands_dir', '') + f"/{command}"
-                    print(f"{Colors.DIM}     Location: {target_dir}{Colors.NC}")
-                print()
+            return f"{prefix}{Colors.REVERSE}{command:<{max_cmd_length}}{Colors.NC}"
         else:
             if is_installed:
-                print(f" {Colors.GREEN}✓{Colors.NC} {command:<{max_cmd_length}} {Colors.GREEN}[INSTALLED]{Colors.NC}")
+                return f"{prefix}{command:<{max_cmd_length}}"
             else:
-                print(f"   {Colors.DIM}{command:<{max_cmd_length}} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
+                return f"{prefix}{Colors.DIM}{command:<{max_cmd_length}}{Colors.NC}"
+    
+    def show_command_details(command: str, is_installed: bool) -> None:
+        print(f"\n{Colors.DIM}     Claude command template for automation{Colors.NC}")
+        if command in installed_commands:
+            target_dir = status.get('commands_dir', '') + f"/{command}"
+            print(f"{Colors.DIM}     Location: {target_dir}{Colors.NC}")
+    
+    draw_base_menu(
+        title="Claude Commands",
+        items=commands,
+        selected=selected,
+        get_item_status=get_item_status,
+        get_item_display=get_item_display,
+        show_details=show_details,
+        detail_func=show_command_details
+    )
     
     # Footer
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
@@ -816,7 +797,7 @@ def draw_commands_menu(commands: list, selected: int, installer, show_details: b
     
     print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
 
-def run_code_standards_menu(installer):
+def run_code_standards_menu(installer: Any) -> None:
     """Run code standards component submenu with individual language management"""
     global terminal_resized
     
@@ -909,42 +890,46 @@ def run_code_standards_menu(installer):
     finally:
         print(Colors.SHOW_CURSOR)
 
-def draw_code_standards_menu(languages: list, selected: int, installer, show_details: bool = False):
+def draw_code_standards_menu(languages: List[str], selected: int, installer: Any, show_details: bool = False) -> None:
     """Draw the code standards submenu"""
-    print(Colors.HIDE_CURSOR, end='')
-    clear_screen()
-    
     # Get current installation status
     status = installer.check_status()
     installed_languages = status.get('installed_languages', [])
     
-    # Header
-    print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 Code Standards{Colors.NC}")
-    print(f"Available Languages: {len(languages)}\n")
-    
-    # Languages list
-    for i, language in enumerate(languages):
-        is_selected = i == selected
+    def get_item_status(language: str) -> str:
         is_installed = language in installed_languages
+        if is_installed:
+            return f"{Colors.GREEN}[INSTALLED]{Colors.NC}"
+        else:
+            return f"{Colors.GRAY}[NOT INSTALLED]{Colors.NC}"
+    
+    def get_item_display(language: str, is_selected: bool) -> str:
+        is_installed = language in installed_languages
+        prefix = f"{Colors.GREEN}✓{Colors.NC} " if is_installed else "  "
         
-        # Selection indicator
         if is_selected:
-            if is_installed:
-                print(f" {Colors.GREEN}✓{Colors.NC} {Colors.REVERSE}{language:<20}{Colors.NC} {Colors.GREEN}[INSTALLED]{Colors.NC}")
-            else:
-                print(f"   {Colors.REVERSE}{language:<20}{Colors.NC} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
-            
-            if show_details:
-                print(f"\n{Colors.DIM}     Standards for {language} programming language{Colors.NC}")
-                if is_installed:
-                    target_dir = status.get('standards_dir', '') + f"/{language}"
-                    print(f"{Colors.DIM}     Location: {target_dir}{Colors.NC}")
-                print()
+            return f"{prefix}{Colors.REVERSE}{language:<20}{Colors.NC}"
         else:
             if is_installed:
-                print(f" {Colors.GREEN}✓{Colors.NC} {language:<20} {Colors.GREEN}[INSTALLED]{Colors.NC}")
+                return f"{prefix}{language:<20}"
             else:
-                print(f"   {Colors.DIM}{language:<20} {Colors.GRAY}[NOT INSTALLED]{Colors.NC}")
+                return f"{prefix}{Colors.DIM}{language:<20}{Colors.NC}"
+    
+    def show_language_details(language: str, is_installed: bool) -> None:
+        print(f"\n{Colors.DIM}     Standards for {language} programming language{Colors.NC}")
+        if language in installed_languages:
+            target_dir = status.get('standards_dir', '') + f"/{language}"
+            print(f"{Colors.DIM}     Location: {target_dir}{Colors.NC}")
+    
+    draw_base_menu(
+        title="Code Standards",
+        items=languages,
+        selected=selected,
+        get_item_status=get_item_status,
+        get_item_display=get_item_display,
+        show_details=show_details,
+        detail_func=show_language_details
+    )
     
     # Footer
     print(f"\n{Colors.DIM}─────────────────────────────────────────────────────────────────────────────────────{Colors.NC}")
@@ -956,7 +941,7 @@ def draw_code_standards_menu(languages: list, selected: int, installer, show_det
     
     print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
 
-def run_scripts_menu(installer):
+def run_scripts_menu(installer: Any) -> None:
     """Run scripts component submenu"""
     details = installer.get_details()
     available_scripts = details.get('available_scripts', [])
@@ -985,18 +970,117 @@ def run_scripts_menu(installer):
             result = installer.uninstall()
         else:
             result = installer.install()
-        
-        clear_screen()
-        print(f"\n{Colors.CYAN}Scripts {action_text.title()}{Colors.NC}\n")
-        if result.success:
-            print(f"{Colors.GREEN}✓ {result.message}{Colors.NC}")
-        else:
-            print(f"{Colors.RED}✗ {result.message}{Colors.NC}")
-        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-        getch()
+        # Action is instant, return immediately
 
 
-def run_recommended_menu(installer):
+def run_uninstall_menu(installer: Any) -> None:
+    """Run uninstall everything menu with confirmation screen"""
+    global terminal_resized
+    
+    force_redraw = True
+    confirmed = False
+    
+    try:
+        while True:
+            if terminal_resized:
+                terminal_resized = False
+                force_redraw = True
+            
+            if force_redraw:
+                clear_screen()
+                
+                # Header
+                print(f"\n{Colors.BOLD}{Colors.RED}🗑️  Uninstall Everything{Colors.NC}")
+                print(f"{Colors.YELLOW}⚠️  This will remove all ethPandaOps AI Cookbook components{Colors.NC}\n")
+                
+                # Get current status
+                status = installer.check_status()
+                
+                if status['total_items'] == 0:
+                    print(f"{Colors.GREEN}✓ No ethPandaOps components are currently installed{Colors.NC}")
+                    print(f"\n{Colors.DIM}Press any key to return...{Colors.NC}")
+                    getch()
+                    break
+                
+                # Show what will be removed
+                print(f"{Colors.BOLD}The following will be removed:{Colors.NC}")
+                print("=" * 60)
+                
+                # Show installed components
+                for component, items in status['components_installed'].items():
+                    if component == 'hooks' and items:
+                        print(f"\n{Colors.BOLD}{component.replace('_', ' ').title()}:{Colors.NC}")
+                        if items.get('global'):
+                            print("  Global hooks:")
+                            for hook in items['global']:
+                                print(f"    • {hook}")
+                        if items.get('local'):
+                            print("  Local hooks:")
+                            for hook in items['local']:
+                                print(f"    • {hook}")
+                    elif items:
+                        print(f"\n{Colors.BOLD}{component.replace('_', ' ').title()}:{Colors.NC}")
+                        for item in items:
+                            print(f"  • {item}")
+                
+                # Show local projects
+                if status['local_projects']:
+                    print(f"\n{Colors.BOLD}Local Projects:{Colors.NC}")
+                    for project in status['local_projects']:
+                        print(f"  • {project}")
+                
+                # Show directories that will be cleaned
+                print(f"\n{Colors.BOLD}Directories to be removed:{Colors.NC}")
+                print("  • ~/.claude/ethpandaops/")
+                print("  • ~/.claude/commands/ethpandaops/")
+                print("  • ~/.claude/hooks/ethpandaops/")
+                
+                print(f"\n{Colors.BOLD}Files to be cleaned:{Colors.NC}")
+                print("  • ~/.claude/CLAUDE.md (ethPandaOps entries)")
+                print("  • ~/.claude/settings.json (hook entries)")
+                print("  • ~/.claude/.ai-cookbook-projects.json")
+                print("  • Local project .claude/settings.json files")
+                
+                print("\n" + "=" * 60)
+                print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  This action cannot be undone!{Colors.NC}")
+                
+                if not confirmed:
+                    print(f"\n{Colors.BOLD}Are you sure you want to uninstall everything?{Colors.NC}")
+                    print(f"\n  {Colors.RED}[y]{Colors.NC} Yes, uninstall everything")
+                    print(f"  {Colors.GREEN}[n]{Colors.NC} No, go back")
+                    print(f"\n{Colors.DIM}Press y to confirm, n or ← to cancel{Colors.NC}")
+                
+                force_redraw = False
+            
+            if confirmed:
+                # Run the uninstallation
+                print(f"\n{Colors.YELLOW}🔧 Uninstalling all components...{Colors.NC}")
+                print("=" * 60)
+                result = installer.uninstall(skip_confirmation=True)
+                
+                # Show result and wait for user to read it
+                if result.success:
+                    print(f"\n{Colors.GREEN}✅ {result.message}{Colors.NC}")
+                else:
+                    print(f"\n{Colors.RED}❌ {result.message}{Colors.NC}")
+                
+                print(f"\n{Colors.DIM}Press any key to return to main menu...{Colors.NC}")
+                getch()
+                break
+            
+            # Get user input
+            key = getch()
+            
+            if key in ['n', 'q', 'LEFT', '\x03']:  # n, q, left arrow, or Ctrl+C
+                break
+            elif key == 'y':
+                confirmed = True
+                force_redraw = True
+                
+    except KeyboardInterrupt:
+        pass
+
+def run_recommended_menu(installer: Any) -> None:
     """Run recommended tools submenu with interactive options"""
     global terminal_resized
     
@@ -1072,22 +1156,17 @@ def run_recommended_menu(installer):
                 
                 if action:
                     try:
-                        result = action()
-                        
-                        # Show result
-                        clear_screen()
-                        print(f"\n{Colors.CYAN}{option['name']}{Colors.NC}\n")
-                        
-                        if result and hasattr(result, 'success'):
-                            if result.success:
-                                print(f"{Colors.GREEN}✓ {result.message}{Colors.NC}")
-                            else:
-                                print(f"{Colors.RED}✗ {result.message}{Colors.NC}")
+                        # For recommended tools installation, we want to see the output
+                        if option['name'] == "✅ Install Recommended Tools":
+                            clear_screen()
+                            result = action()
+                            # Wait for user to read the output
+                            print(f"\n{Colors.DIM}Press any key to return to main menu...{Colors.NC}")
+                            getch()
+                            # Return to main menu after installation
+                            break
                         else:
-                            print(f"{Colors.GREEN}✓ Action completed{Colors.NC}")
-                        
-                        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
-                        getch()
+                            result = action()
                         
                         # Rebuild options as state may have changed
                         installer.build_interactive_options()
@@ -1099,10 +1178,8 @@ def run_recommended_menu(installer):
                         force_redraw = True
                         
                     except Exception as e:
-                        clear_screen()
+                        # Show error inline without clearing screen
                         print(f"\n{Colors.RED}Error: {e}{Colors.NC}")
-                        print(f"{Colors.DIM}Press any key to continue...{Colors.NC}")
-                        getch()
                         force_redraw = True
                         
     except KeyboardInterrupt:

@@ -43,3 +43,16 @@ MAIN_MENU_ITEMS = [
     "Hooks",
     "Scripts"
 ]
+
+# Organization
+ORG_NAME = "ethpandaops"
+ORG_DISPLAY_NAME = "ethPandaOps"
+
+# File markers
+META_FILE_NAME = ".ai-cookbook-meta.json"
+PROJECTS_FILE_NAME = ".ai-cookbook-projects.json"
+SCRIPT_MARKER = "# Added by ai-cookbook"
+
+# Section markers for CLAUDE.md
+SECTION_START_MARKER = "<!-- ETHPANDAOPS_STANDARDS_START -->"
+SECTION_END_MARKER = "<!-- ETHPANDAOPS_STANDARDS_END -->"

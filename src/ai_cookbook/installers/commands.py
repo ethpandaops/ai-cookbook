@@ -19,7 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 class CommandsInstaller(BaseInstaller):
     """Installer for Claude commands integration."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize commands installer."""
         super().__init__(
             name="Claude Commands",
@@ -28,6 +28,9 @@ class CommandsInstaller(BaseInstaller):
         self.commands_source = PROJECT_ROOT / "claude-code" / "commands"
         self.scripts_source = PROJECT_ROOT / "scripts"
         self.scripts_bin = Path.home() / ".pandaops" / "bin"
+        
+        # Initialize update detector
+        self.initialize_update_detector(self.commands_source, CLAUDE_COMMANDS_DIR)
         
     def check_status(self) -> Dict[str, Any]:
         """Check installation status of Claude commands.
@@ -145,6 +148,10 @@ class CommandsInstaller(BaseInstaller):
             # Copy command file
             shutil.copy2(command_source, command_target)
             
+            # Update metadata
+            if self.update_detector:
+                self.update_detector.update_metadata(command_name, command_source)
+            
             details = {
                 'command': command_name,
                 'target_path': str(command_target)
@@ -191,6 +198,10 @@ class CommandsInstaller(BaseInstaller):
             
             # Remove command file
             command_target.unlink()
+            
+            # Remove metadata
+            if self.update_detector:
+                self.update_detector.remove_metadata(command_name)
             
             details = {
                 'command': command_name,
