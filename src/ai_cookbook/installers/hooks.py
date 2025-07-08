@@ -1,6 +1,7 @@
 """Hooks installer for PandaOps Cookbook."""
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -11,7 +12,8 @@ from ..utils.file_operations import (
     list_files, read_json_file, write_json_file
 )
 from ..utils.system import run_command
-from ..config.settings import CLAUDE_DIR
+from ..config.settings import CLAUDE_DIR, ORG_NAME
+from ..updaters.detector import UpdateStatus
 
 # Get the project root directory (ai-cookbook)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
@@ -24,7 +26,7 @@ class HooksInstaller(InteractiveInstaller):
     Supports both global and local installation modes.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize hooks installer."""
         super().__init__(
             name="Hooks",
@@ -32,6 +34,14 @@ class HooksInstaller(InteractiveInstaller):
         )
         self.hooks_source = PROJECT_ROOT / "claude-code" / "hooks"
         self.current_mode = "global"  # Default to global mode
+        
+        # Initialize update detector for hooks in organization directory
+        from ..config.settings import CLAUDE_HOOKS_DIR
+        self.initialize_update_detector(self.hooks_source, CLAUDE_HOOKS_DIR)
+        
+        # Initialize project registry for tracking local installations
+        from ..project_registry import ProjectRegistry
+        self.project_registry = ProjectRegistry()
         
     def check_status(self) -> Dict[str, Any]:
         """Check installation status of hooks.
@@ -131,6 +141,11 @@ class HooksInstaller(InteractiveInstaller):
             if hook_info:
                 hook_details[hook_name] = hook_info
                 
+        # Add installation status to hook details
+        for hook_name in hook_details:
+            hook_details[hook_name]['installed_global'] = hook_name in status['global_hooks']
+            hook_details[hook_name]['installed_local'] = hook_name in status['local_hooks']
+                
         return {
             'name': self.name,
             'description': self.description,
@@ -147,7 +162,8 @@ class HooksInstaller(InteractiveInstaller):
                 'local_settings': status['local_settings']
             },
             'hooks': hook_details,
-            'current_mode': self.current_mode
+            'current_mode': self.current_mode,
+            'mode_display': f"Current mode: {self.current_mode.upper()}"
         }
         
     def get_hook_info(self, hook_name: str) -> Dict[str, Any]:
@@ -237,6 +253,20 @@ class HooksInstaller(InteractiveInstaller):
             shutil.copy2(hook_script, installed_hook_path)
             installed_hook_path.chmod(0o755)
             
+            # Update metadata for the hook
+            if ORG_NAME in str(hooks_dir):
+                # For local installations, create a separate update detector
+                if mode == "local":
+                    from ..updaters.detector import UpdateDetector
+                    local_detector = UpdateDetector(self.hooks_source, hooks_dir)
+                    hook_file_name = f"{hook_name}.sh"
+                    local_detector.update_metadata(hook_file_name, hook_script)
+                elif self.update_detector:
+                    # Store just the installed filename, not the source path
+                    hook_file_name = f"{hook_name}.sh"
+                    # Pass the source hook.sh file, not the hook directory
+                    self.update_detector.update_metadata(hook_file_name, hook_script)
+            
             # Read hook configuration
             config = read_json_file(hook_config)
             hook_type = config.get('hook_type', 'PostToolUse')
@@ -244,6 +274,10 @@ class HooksInstaller(InteractiveInstaller):
             
             # Add hook to settings
             self._add_hook_to_settings(hook_name, hook_type, matcher, str(installed_hook_path), mode)
+            
+            # Register project if installing locally
+            if mode == "local":
+                self.project_registry.register_project(Path.cwd(), ['hooks'])
             
             return InstallationResult(
                 True,
@@ -285,6 +319,22 @@ class HooksInstaller(InteractiveInstaller):
             # Remove hook script
             if installed_hook_path.exists():
                 installed_hook_path.unlink()
+            
+            # Remove metadata
+            if ORG_NAME in str(hooks_dir):
+                hook_file_name = f"{hook_name}.sh"
+                if mode == "local":
+                    from ..updaters.detector import UpdateDetector
+                    local_detector = UpdateDetector(self.hooks_source, hooks_dir)
+                    local_detector.remove_metadata(hook_file_name)
+                elif self.update_detector:
+                    self.update_detector.remove_metadata(hook_file_name)
+            
+            # Check if this was the last local hook and unregister project if so
+            if mode == "local":
+                remaining_hooks = self._get_installed_hooks("local")
+                if not remaining_hooks:
+                    self.project_registry.unregister_project(Path.cwd(), ['hooks'])
                 
             return InstallationResult(
                 True,
@@ -322,42 +372,80 @@ class HooksInstaller(InteractiveInstaller):
         
         # Get current status
         status = self.check_status()
-        installed_hooks = self._get_installed_hooks(self.current_mode)
+        local_hooks = self._get_installed_hooks("local")
+        global_hooks = self._get_installed_hooks("global")
         available_hooks = status['available_hooks']
         
-        # Add install options for available hooks
+        # Import Colors for styling
+        from ..tui import Colors
+        
+        # Add install/uninstall options for each hook
         for hook_name in available_hooks:
-            if hook_name not in installed_hooks:
-                hook_info = self._get_hook_info(hook_name)
-                description = hook_info.get('description', 'No description available') if hook_info else 'No description available'
-                self.add_interactive_option(
-                    f"Install {hook_name}",
-                    description,
-                    lambda h=hook_name: self.install_hook(h)
-                )
-                
-        # Add uninstall options for installed hooks
-        for hook_name in installed_hooks:
-            self.add_interactive_option(
-                f"Uninstall {hook_name}",
-                f"Remove {hook_name} hook from {self.current_mode} configuration",
-                lambda h=hook_name: self.uninstall_hook(h)
-            )
+            hook_info = self._get_hook_info(hook_name)
+            base_description = hook_info.get('description', 'No description available') if hook_info else 'No description available'
             
-        # Add install all option if there are uninstalled hooks
-        uninstalled = [h for h in available_hooks if h not in installed_hooks]
-        if uninstalled:
+            # Check installation status
+            is_local = hook_name in local_hooks
+            is_global = hook_name in global_hooks
+            
+            # Build status indicators
+            status_parts = []
+            if is_global:
+                status_parts.append(f"{Colors.CYAN}[GLOBAL]{Colors.NC}")
+            if is_local:
+                status_parts.append(f"{Colors.GREEN}[LOCAL]{Colors.NC}")
+            
+            status_suffix = f" {' '.join(status_parts)}" if status_parts else ""
+            
+            # In LOCAL mode
+            if self.current_mode == "local":
+                if not is_local:
+                    # Can install locally regardless of global status
+                    self.add_interactive_option(
+                        f"Install {hook_name}{status_suffix}",
+                        base_description,
+                        lambda h=hook_name: self.install_hook(h, mode="local")
+                    )
+                else:
+                    # Can only uninstall from local
+                    self.add_interactive_option(
+                        f"Uninstall {hook_name} (local only){status_suffix}",
+                        f"Remove {hook_name} hook from local configuration",
+                        lambda h=hook_name: self.uninstall_hook(h, mode="local")
+                    )
+            
+            # In GLOBAL mode
+            elif self.current_mode == "global":
+                if not is_global:
+                    # Can install globally regardless of local status
+                    self.add_interactive_option(
+                        f"Install {hook_name}{status_suffix}",
+                        base_description,
+                        lambda h=hook_name: self.install_hook(h, mode="global")
+                    )
+                else:
+                    # Can only uninstall from global
+                    self.add_interactive_option(
+                        f"Uninstall {hook_name}{status_suffix}",
+                        f"Remove {hook_name} hook from global configuration",
+                        lambda h=hook_name: self.uninstall_hook(h, mode="global")
+                    )
+            
+        # Add install all option if there are uninstalled hooks in current mode
+        current_mode_hooks = local_hooks if self.current_mode == "local" else global_hooks
+        uninstalled_here = [h for h in available_hooks if h not in current_mode_hooks]
+        if uninstalled_here:
             self.add_interactive_option(
-                "Install all hooks",
-                f"Install all {len(uninstalled)} available hooks in {self.current_mode} mode",
+                f"Install all hooks ({self.current_mode})",
+                f"Install all {len(uninstalled_here)} available hooks in {self.current_mode} mode",
                 self._install_all_hooks
             )
             
-        # Add uninstall all option if there are installed hooks
-        if installed_hooks:
+        # Add uninstall all option if there are installed hooks in current mode
+        if current_mode_hooks:
             self.add_interactive_option(
-                "Uninstall all hooks",
-                f"Remove all {len(installed_hooks)} installed hooks from {self.current_mode} configuration",
+                f"Uninstall all {self.current_mode} hooks",
+                f"Remove all {len(current_mode_hooks)} hooks from {self.current_mode} configuration",
                 self._uninstall_all_hooks
             )
             
@@ -424,9 +512,9 @@ class HooksInstaller(InteractiveInstaller):
             Path to hooks directory
         """
         if mode == "local":
-            return Path.cwd() / ".claude" / "hooks" / "ethpandaops"
+            return Path.cwd() / ".claude" / "hooks" / ORG_NAME
         else:
-            return CLAUDE_DIR / "hooks" / "ethpandaops"
+            return CLAUDE_DIR / "hooks" / ORG_NAME
             
     def _get_settings_path(self, mode: str) -> Path:
         """Get settings file path based on mode.
@@ -460,6 +548,7 @@ class HooksInstaller(InteractiveInstaller):
             hooks = []
             
             if 'hooks' in settings:
+                hooks_dir = self._get_hooks_dir(mode)
                 for hook_type, entries in settings['hooks'].items():
                     for entry in entries:
                         for hook in entry.get('hooks', []):
@@ -467,7 +556,10 @@ class HooksInstaller(InteractiveInstaller):
                             # Extract hook name from command path
                             if command.endswith('.sh'):
                                 hook_name = Path(command).stem
-                                if hook_name not in hooks:
+                                hook_file = hooks_dir / f"{hook_name}.sh"
+                                
+                                # Only include if file actually exists
+                                if hook_file.exists() and hook_name not in hooks:
                                     hooks.append(hook_name)
                                     
             return sorted(hooks)
@@ -492,6 +584,418 @@ class HooksInstaller(InteractiveInstaller):
                 pass
         return None
         
+    def check_updates(self) -> Optional[UpdateStatus]:
+        """Check for updates to hooks in all locations.
+        
+        This checks both global hooks and all registered local project hooks,
+        combining them into a single UpdateStatus.
+        
+        Returns:
+            UpdateStatus containing all hook updates across all locations
+        """
+        # First get global updates using parent class method
+        global_status = super().check_updates()
+        
+        # Check for updates in all registered projects
+        project_updates = self.check_updates_in_projects()
+        
+        # If no updates anywhere, return None
+        if not global_status and not project_updates:
+            return None
+        
+        # Start with global updates or empty lists
+        all_updated = list(global_status.updated) if global_status else []
+        all_new = list(global_status.new) if global_status else []
+        all_deleted = list(global_status.deleted) if global_status else []
+        all_unchanged = list(global_status.unchanged) if global_status else []
+        
+        # Add project updates with project path prefix
+        for project_path, project_status in project_updates.items():
+            project_name = Path(project_path).name
+            # Prefix files with project info to distinguish them
+            for file in project_status.updated:
+                all_updated.append(f"[{project_name}] {file}")
+            for file in project_status.new:
+                all_new.append(f"[{project_name}] {file}")
+            for file in project_status.deleted:
+                all_deleted.append(f"[{project_name}] {file}")
+        
+        return UpdateStatus(all_updated, all_new, all_deleted, all_unchanged)
+    
+    def check_updates_in_projects(self) -> Dict[str, Any]:
+        """Check for updates in all registered projects with local hooks.
+        
+        Returns:
+            Dictionary mapping project paths to their update status
+        """
+        from ..updaters.detector import UpdateDetector
+        
+        project_updates = {}
+        projects_with_hooks = self.project_registry.get_projects_with_component('hooks')
+        
+        for project_path in projects_with_hooks:
+            # Create UpdateDetector for this project's local hooks
+            local_hooks_dir = project_path / ".claude" / "hooks" / ORG_NAME
+            
+            if local_hooks_dir.exists():
+                # Initialize a temporary update detector for this project
+                detector = UpdateDetector(self.hooks_source, local_hooks_dir)
+                update_status = detector.check_updates(installed_only=True, check_orphaned=True)
+                
+                if update_status.has_changes:
+                    project_updates[str(project_path)] = update_status
+        
+        return project_updates
+    
+    def apply_hook_update(self, file_name: str) -> bool:
+        """Apply a hook update, handling both global and project-specific hooks.
+        
+        Args:
+            file_name: The file name, possibly with [project] prefix
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Check if this is a project-specific hook
+            if file_name.startswith('[') and '] ' in file_name:
+                # Extract project name and hook file
+                project_end = file_name.index('] ')
+                project_name = file_name[1:project_end]
+                actual_file = file_name[project_end + 2:]
+                hook_name = actual_file.replace('.sh', '')
+                
+                # Find the project path from registry
+                for project_path in self.project_registry.get_projects_with_component('hooks'):
+                    if project_path.name == project_name:
+                        # Update this specific hook in the project
+                        original_cwd = Path.cwd()
+                        try:
+                            os.chdir(project_path)
+                            result = self.install_hook(hook_name, mode="local")
+                            if not result.success:
+                                print(f"  [Error] Failed to update hook '{hook_name}' in project '{project_name}': {result.message}")
+                            return result.success
+                        except Exception as e:
+                            print(f"  [Error] Exception updating hook '{hook_name}' in project '{project_name}': {str(e)}")
+                            return False
+                        finally:
+                            os.chdir(original_cwd)
+                
+                print(f"  [Warning] Could not find project '{project_name}' for hook update")
+                return False
+            else:
+                # Regular global hook
+                hook_name = file_name.replace('.sh', '')
+                result = self.install_hook(hook_name, mode="global")
+                if not result.success:
+                    print(f"  [Error] Failed to update global hook '{hook_name}': {result.message}")
+                return result.success
+        except Exception as e:
+            print(f"  [Error] Exception in apply_hook_update for '{file_name}': {str(e)}")
+            return False
+    
+    def update_hooks_in_project(self, project_path: Path) -> InstallationResult:
+        """Update hooks in a specific project.
+        
+        Args:
+            project_path: Path to the project
+            
+        Returns:
+            InstallationResult with update details
+        """
+        from ..updaters.detector import UpdateDetector
+        
+        local_hooks_dir = project_path / ".claude" / "hooks" / "ethpandaops"
+        
+        if not local_hooks_dir.exists():
+            return InstallationResult(
+                False,
+                f"No local hooks found in project: {project_path}"
+            )
+        
+        # Create UpdateDetector for this project
+        detector = UpdateDetector(self.hooks_source, local_hooks_dir)
+        update_status = detector.check_updates(installed_only=True, check_orphaned=True)
+        
+        if not update_status.has_changes:
+            return InstallationResult(
+                True,
+                f"No updates needed for hooks in {project_path}"
+            )
+        
+        # Apply updates
+        updated_count = 0
+        errors = []
+        
+        # Update changed files
+        for hook_file in update_status.updated:
+            try:
+                hook_name = hook_file.replace('.sh', '')
+                source_file = self.hooks_source / hook_name / "hook.sh"
+                dest_file = local_hooks_dir / hook_file
+                
+                if source_file.exists():
+                    shutil.copy2(source_file, dest_file)
+                    dest_file.chmod(0o755)
+                    detector.update_metadata(hook_file, source_file)
+                    updated_count += 1
+            except Exception as e:
+                errors.append(f"Failed to update {hook_file}: {str(e)}")
+        
+        # Add new files
+        for hook_file in update_status.new:
+            try:
+                hook_name = hook_file.replace('.sh', '')
+                # Install the hook in local mode for this project
+                original_cwd = Path.cwd()
+                os.chdir(project_path)
+                result = self.install_hook(hook_name, mode="local")
+                os.chdir(original_cwd)
+                
+                if result.success:
+                    updated_count += 1
+                else:
+                    errors.append(f"Failed to install {hook_file}: {result.message}")
+            except Exception as e:
+                errors.append(f"Failed to add {hook_file}: {str(e)}")
+        
+        # Remove deleted files
+        for hook_file in update_status.deleted:
+            try:
+                dest_file = local_hooks_dir / hook_file
+                if dest_file.exists():
+                    dest_file.unlink()
+                    detector.remove_metadata(hook_file)
+                    updated_count += 1
+            except Exception as e:
+                errors.append(f"Failed to remove {hook_file}: {str(e)}")
+        
+        if errors:
+            return InstallationResult(
+                False,
+                f"Updated {updated_count} hooks in {project_path}, but {len(errors)} errors occurred",
+                {'errors': errors, 'updated': updated_count}
+            )
+        
+        return InstallationResult(
+            True,
+            f"Successfully updated {updated_count} hooks in {project_path}",
+            {'updated': updated_count}
+        )
+    
+    def sync_hooks_with_files(self, mode: Optional[str] = None, include_projects: bool = True) -> InstallationResult:
+        """Synchronize hooks settings with actual files on disk.
+        
+        Removes hooks from settings if their files don't exist.
+        Adds hooks to settings if files exist but aren't configured.
+        
+        Args:
+            mode: Installation mode, or None to check both
+            include_projects: Whether to also sync hooks in registered projects
+            
+        Returns:
+            InstallationResult with sync details
+        """
+        if mode is None:
+            modes_to_check = ['global', 'local']
+        else:
+            modes_to_check = [mode]
+        
+        results = {
+            'removed_from_settings': [],
+            'orphaned_files': [],
+            'added_to_settings': []
+        }
+        
+        # First sync current directory
+        for check_mode in modes_to_check:
+            settings_path = self._get_settings_path(check_mode)
+            if not settings_path.exists():
+                continue
+            
+            try:
+                settings = read_json_file(settings_path)
+                hooks_dir = self._get_hooks_dir(check_mode)
+                modified = False
+                
+                # Check hooks in settings
+                if 'hooks' in settings:
+                    # Create new structure without missing hooks
+                    new_hooks = {}
+                    
+                    for hook_type, entries in settings['hooks'].items():
+                        new_entries = []
+                        
+                        for entry in entries:
+                            new_hooks_list = []
+                            for hook in entry.get('hooks', []):
+                                command = hook.get('command', '')
+                                if command.endswith('.sh'):
+                                    hook_file = Path(command)
+                                    if hook_file.exists():
+                                        # Keep this hook
+                                        new_hooks_list.append(hook)
+                                    else:
+                                        # Mark for removal
+                                        modified = True
+                                        results['removed_from_settings'].append({
+                                            'mode': check_mode,
+                                            'hook': hook_file.stem,
+                                            'reason': 'File not found'
+                                        })
+                                else:
+                                    # Keep non-.sh hooks as-is
+                                    new_hooks_list.append(hook)
+                            
+                            # Only keep entry if it has hooks
+                            if new_hooks_list:
+                                new_entry = entry.copy()
+                                new_entry['hooks'] = new_hooks_list
+                                new_entries.append(new_entry)
+                        
+                        # Only keep hook type if it has entries
+                        if new_entries:
+                            new_hooks[hook_type] = new_entries
+                    
+                    # Update settings with cleaned hooks
+                    if modified:
+                        settings['hooks'] = new_hooks
+                
+                # Save modified settings
+                if modified:
+                    write_json_file(settings_path, settings)
+                
+                # Check for orphaned files (files without settings entries)
+                if hooks_dir.exists():
+                    for hook_file in hooks_dir.glob('*.sh'):
+                        if hook_file.name != '.ai-cookbook-meta.json':
+                            # Check if this hook is in settings
+                            hook_name = hook_file.stem
+                            if hook_name not in self._get_installed_hooks(check_mode):
+                                # Hook file exists but not in settings - try to add it
+                                try:
+                                    # Check if we have the source config to get hook details
+                                    hook_source_dir = self.hooks_source / hook_name
+                                    if hook_source_dir.exists():
+                                        config_file = hook_source_dir / "config.json"
+                                        if config_file.exists():
+                                            config = read_json_file(config_file)
+                                            hook_type = config.get('hook_type', 'PostToolUse')
+                                            matcher = config.get('matcher', '')
+                                            
+                                            # Add to settings
+                                            self._add_hook_to_settings(hook_name, hook_type, matcher, 
+                                                                     str(hook_file), check_mode)
+                                            results['added_to_settings'].append({
+                                                'mode': check_mode,
+                                                'hook': hook_name,
+                                                'file': str(hook_file)
+                                            })
+                                            modified = True
+                                        else:
+                                            # No config found, add to orphaned
+                                            results['orphaned_files'].append({
+                                                'mode': check_mode,
+                                                'file': str(hook_file),
+                                                'hook': hook_name,
+                                                'reason': 'No config.json found'
+                                            })
+                                    else:
+                                        # No source directory, add to orphaned
+                                        results['orphaned_files'].append({
+                                            'mode': check_mode,
+                                            'file': str(hook_file),
+                                            'hook': hook_name,
+                                            'reason': 'No source directory found'
+                                        })
+                                except Exception as e:
+                                    results['orphaned_files'].append({
+                                        'mode': check_mode,
+                                        'file': str(hook_file),
+                                        'hook': hook_name,
+                                        'reason': f'Failed to add to settings: {str(e)}'
+                                    })
+                
+            except Exception as e:
+                return InstallationResult(
+                    False,
+                    f"Failed to sync hooks: {str(e)}"
+                )
+        
+        # Now sync project-specific hooks if requested
+        if include_projects and 'local' in modes_to_check:
+            projects_with_hooks = self.project_registry.get_projects_with_component('hooks')
+            
+            for project_path in projects_with_hooks:
+                # Skip current directory as we already checked it
+                if project_path == Path.cwd():
+                    continue
+                
+                try:
+                    # Change to project directory temporarily
+                    original_cwd = Path.cwd()
+                    os.chdir(project_path)
+                    
+                    # Sync local hooks for this project
+                    project_settings_path = self._get_settings_path('local')
+                    if project_settings_path.exists():
+                        # Run sync for this project
+                        project_sync = self.sync_hooks_with_files(mode='local', include_projects=False)
+                        
+                        # Merge results
+                        if project_sync.details.get('removed_from_settings'):
+                            for item in project_sync.details['removed_from_settings']:
+                                item['project'] = str(project_path)
+                                results['removed_from_settings'].append(item)
+                        
+                        if project_sync.details.get('added_to_settings'):
+                            for item in project_sync.details['added_to_settings']:
+                                item['project'] = str(project_path)
+                                results['added_to_settings'].append(item)
+                        
+                        if project_sync.details.get('orphaned_files'):
+                            for item in project_sync.details['orphaned_files']:
+                                item['project'] = str(project_path)
+                                results['orphaned_files'].append(item)
+                    
+                    os.chdir(original_cwd)
+                    
+                except Exception as e:
+                    # Make sure we restore the directory
+                    if 'original_cwd' in locals():
+                        os.chdir(original_cwd)
+                    # Log but don't fail the whole sync
+                    results['orphaned_files'].append({
+                        'project': str(project_path),
+                        'mode': 'local',
+                        'hook': 'unknown',
+                        'reason': f'Failed to sync project: {str(e)}'
+                    })
+        
+        # Summary
+        total_changes = len(results['removed_from_settings']) + len(results['orphaned_files']) + len(results['added_to_settings'])
+        if total_changes > 0:
+            parts = []
+            if results['removed_from_settings']:
+                parts.append(f"{len(results['removed_from_settings'])} removed from settings")
+            if results['added_to_settings']:
+                parts.append(f"{len(results['added_to_settings'])} added to settings")
+            if results['orphaned_files']:
+                parts.append(f"{len(results['orphaned_files'])} orphaned files found")
+            
+            return InstallationResult(
+                True,
+                f"Synchronized hooks: {', '.join(parts)}",
+                results
+            )
+        else:
+            return InstallationResult(
+                True,
+                "Hooks are already synchronized",
+                results
+            )
+    
     def _check_hook_dependencies(self, hook_name: str) -> Dict[str, Any]:
         """Check if hook dependencies are met.
         

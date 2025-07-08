@@ -18,7 +18,7 @@ class ScriptsInstaller(BaseInstaller):
     making all project scripts globally accessible.
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize scripts installer."""
         super().__init__(
             name="Scripts",
@@ -102,14 +102,66 @@ class ScriptsInstaller(BaseInstaller):
                 {'error': str(e)}
             )
             
-    def uninstall(self) -> InstallationResult:
-        """Remove scripts directory from PATH (manual operation).
+    def uninstall(self, auto_remove: bool = False) -> InstallationResult:
+        """Remove scripts directory from PATH.
+        
+        Args:
+            auto_remove: If True, automatically remove from shell profile
         
         Returns:
-            InstallationResult with instructions for manual removal
+            InstallationResult with success/failure or manual instructions
         """
         shell_profile = get_shell_profile_path()
         
+        if auto_remove:
+            try:
+                # Read the shell profile
+                if not shell_profile.exists():
+                    return InstallationResult(
+                        True,
+                        "Shell profile not found, nothing to remove"
+                    )
+                
+                with open(shell_profile, 'r') as f:
+                    lines = f.readlines()
+                
+                # Filter out the PATH export line and its comment
+                new_lines = []
+                skip_next = False
+                path_line = f'export PATH="{self.scripts_dir}:$PATH"'
+                
+                for line in lines:
+                    if skip_next:
+                        skip_next = False
+                        continue
+                    if line.strip() == "# Added by ai-cookbook":
+                        # Check if next line is our PATH export
+                        skip_next = True
+                        continue
+                    if path_line in line:
+                        continue
+                    new_lines.append(line)
+                
+                # Write back the modified content
+                with open(shell_profile, 'w') as f:
+                    f.writelines(new_lines)
+                
+                return InstallationResult(
+                    True,
+                    f"Successfully removed scripts from PATH in {shell_profile}",
+                    {
+                        'shell_profile': str(shell_profile),
+                        'note': 'Restart your shell or run "source ' + str(shell_profile) + '" to apply changes'
+                    }
+                )
+                
+            except Exception as e:
+                return InstallationResult(
+                    False,
+                    f"Failed to automatically remove from PATH: {str(e)}"
+                )
+        
+        # Manual removal instructions
         message = f"""
 Scripts PATH removal requires manual editing of your shell profile.
 
