@@ -283,7 +283,7 @@ def main() -> None:
             from .installers.recommended import RecommendedToolsInstaller
             installer = RecommendedToolsInstaller()
             
-            print("🐼 ethPandaOps AI Cookbook - Installing Recommended Tools")
+            print(f"🐼 {ORG_DISPLAY_NAME} AI Cookbook - Installing Recommended Tools")
             print("=" * 60)
             
             # Install recommended tools
@@ -330,7 +330,7 @@ def main() -> None:
                         if total_uninstalled > 0:
                             print(f"  • {total_uninstalled} non-recommended tools removed")
                 
-                print("\n🎉 Your environment is now configured with the recommended ethPandaOps tools!")
+                print(f"\n🎉 Your environment is now configured with the recommended {ORG_DISPLAY_NAME} tools!")
                 
             else:
                 print("❌ Failed to install recommended tools:")
@@ -357,7 +357,7 @@ def main() -> None:
             from .installers.uninstall_all import UninstallAllInstaller
             installer = UninstallAllInstaller()
             
-            print("🐼 ethPandaOps AI Cookbook - Uninstall All Tools")
+            print(f"🐼 {ORG_DISPLAY_NAME} AI Cookbook - Uninstall All Tools")
             print("=" * 60)
             
             # Run uninstall
