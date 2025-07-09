@@ -123,9 +123,21 @@ elif [[ $exit_code -eq 1 ]]; then
     # Issues found: send JSON output to Claude with continue instruction
     issue_count=$(echo "$output" | wc -l | tr -d ' ')
     stop_reason="golangci-lint found $issue_count issues"
-    reason="golangci-lint found $issue_count linting issues. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+    
+    # Limit output to last 5 errors to save context window
+    if [[ $issue_count -gt 5 ]]; then
+        limited_output=$(echo "$output" | tail -n 5)
+        reason="golangci-lint found $issue_count linting issues (showing last 5). Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+
+$limited_output
+
+To see all errors, run: (cd \"$package_dir\" && $cmd)"
+    else
+        reason="golangci-lint found $issue_count linting issues. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
 
 $output"
+    fi
+    
     jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
     exit 0
 elif [[ $exit_code -eq 3 ]]; then
