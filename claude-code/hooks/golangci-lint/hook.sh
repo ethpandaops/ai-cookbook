@@ -141,25 +141,19 @@ $output"
     jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
     exit 0
 elif [[ $exit_code -eq 3 ]]; then
-    # Failure (syntax errors, etc.): send JSON output to Claude
-    stop_reason="golangci-lint compilation errors"
-    reason="golangci-lint failed due to syntax errors or compilation issues. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+    # Failure (syntax errors, etc.): show to user only, don't tell Claude
+    echo "golangci-lint failed due to syntax errors or compilation issues:
 
-$output"
-    jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
-    exit 0
+$output" >&2
+    exit 1
 else
-    # Other error (exit code 2, 4, 5, etc.): non-blocking error
+    # Other error (exit code 2, 4, 5, etc.): show to user only, don't tell Claude
     if [[ -n "$output" ]]; then
-        stop_reason="golangci-lint error (exit $exit_code)"
-        reason="golangci-lint encountered an error (exit code $exit_code). Review and fix these issues using a subtask if they're not expected, then continue with your original task.
+        echo "golangci-lint encountered an error (exit code $exit_code):
 
-$output"
-        jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+$output" >&2
     else
-        stop_reason="golangci-lint failed"
-        reason="golangci-lint failed with exit code $exit_code but produced no output. This may be a configuration or tool issue. Tell the user."
-        jq -n --arg decision "block" --arg reason "$reason" --arg stopReason "$stop_reason" '{decision: $decision, reason: $reason, stopReason: $stopReason}'
+        echo "golangci-lint failed with exit code $exit_code but produced no output. This may be a configuration or tool issue." >&2
     fi
-    exit 0
+    exit 1
 fi
