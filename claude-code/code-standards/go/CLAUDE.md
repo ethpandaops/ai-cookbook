@@ -10,6 +10,7 @@ Unless otherwise specified, you MUST use the following packages:
 
 - Logging: `github.com/sirupsen/logrus`
     - Configure once at the entry point of the application. Pass down the logger to each package via the constructor.
+    - When passing a logger to a method: if ctx is not present, the logger must be the first parameter. If ctx is present, it must be the first parameter, and the logger must be second.
     - Each package must have a `logrus.FieldLogger` instance passed in via the constructor. The package should add its own fields to its log instance. E.g. `log.WithField("package", "user")`
     - Use `log.WithField("field", "value")` to add fields to the log instance.
     - Use `log.WithFields(logrus.Fields{"key": "value", "key2": "value2"})` to add multiple fields to the log instance.
