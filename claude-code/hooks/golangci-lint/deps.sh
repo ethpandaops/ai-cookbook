@@ -28,18 +28,18 @@ fi
 if command_exists golangci-lint; then
     version=$(golangci-lint --version 2>/dev/null | head -n1)
     echo -e "${GREEN}✓ golangci-lint is installed${NC} ($version)"
-    
-    # Check if version supports the required flags (v1.21.0+ has --output.tab.path)
+
+    # Check if version supports the required flags (v2.1.0+ has --output.tab.path)
     version_num=$(echo "$version" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1)
     if [[ -n "$version_num" ]]; then
-        # Convert version to comparable number (e.g., 1.21.0 -> 10210)
+        # Convert version to comparable number (e.g., 2.1.0 -> 10210)
         IFS='.' read -ra VER <<< "$version_num"
         version_compare=$((VER[0] * 10000 + VER[1] * 100 + VER[2]))
-        min_version=$((1 * 10000 + 21 * 100 + 0)) # 1.21.0
-        
+        min_version=$((2 * 10000 + 1 * 100 + 0)) # 2.1.0
+
         if [[ $version_compare -lt $min_version ]]; then
             echo -e "${RED}✗ golangci-lint $version_num is too old${NC}"
-            echo -e "${YELLOW}Required: v1.21.0 or later for --output.tab.path support${NC}"
+            echo -e "${YELLOW}Required: v2.1.0 or later for --output.tab.path support${NC}"
             echo -e "${YELLOW}Current: $version_num${NC}"
             echo ""
             echo -e "${YELLOW}Update golangci-lint:${NC}"
