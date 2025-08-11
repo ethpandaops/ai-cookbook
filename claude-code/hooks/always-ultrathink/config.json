@@ -1,0 +1,9 @@
+{
+  "name": "always-ultrathink",
+  "description": "Automatically adds 'ultrathink' to all user prompts",
+  "hook_type": "UserPromptSubmit",
+  "matcher": "*",
+  "requirements": {
+    "commands": []
+  }
+}
