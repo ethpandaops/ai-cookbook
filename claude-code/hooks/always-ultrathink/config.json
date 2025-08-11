@@ -4,7 +4,6 @@
   "hook_type": "UserPromptSubmit",
   "matcher": "*",
   "requirements": {
-    "commands": ["jq"],
-    "description": "Requires jq for JSON processing"
+    "commands": []
   }
 }
