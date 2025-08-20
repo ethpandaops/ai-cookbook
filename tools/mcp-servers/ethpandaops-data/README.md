@@ -1,13 +1,15 @@
 # ethPandaOps Data MCP Server
 
-A minimal MCP (Model Context Protocol) server that provides access to ethPandaOps datasources through Grafana. The server automatically discovers available datasources on startup and currently supports Loki with plans to add more datasource types.
+A minimal MCP (Model Context Protocol) server that provides access to ethPandaOps datasources through Grafana. The server automatically discovers available datasources on startup and supports Loki, Prometheus, and ClickHouse. Datasources are cached in memory and exposed via a single tool per type, plus a datasource listing tool.
 
 ## Features
 
-- **Automatic datasource discovery** - Connects to Grafana and discovers all available datasources
-- **Flexible configuration** - Use environment variables to specify which datasources to enable
+- **Automatic datasource discovery** - Connects to Grafana and discovers Loki, Prometheus, and ClickHouse datasources
+- **Single tool per type** - Minimal, consistent tool surface for each datasource type
+- **Datasource listing** - `list_datasources` to enumerate UIDs, names, and descriptions
+- **Flexible configuration** - Use env vars to filter UIDs and provide descriptions
 - **Token management** - Configure which environment variable contains your Grafana token
-- **Multi-datasource support** - Query specific datasources by UID when multiple are available
+- **Multi-datasource support** - Pass `datasource_uid` when there are multiple of a type
 
 ## Installation
 
@@ -35,7 +37,9 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
       "env": {
         "GRAFANA_SERVICE_TOKEN_ENV_VAR": "ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN",
         "GRAFANA_URL": "https://grafana.primary.production.platform.ethpandaops.io",
-        "DATASOURCE_UIDS": ""
+        "DATASOURCE_UIDS": "", // optional: comma-separated UIDs to include
+        "DATASOURCE_DESCRIPTIONS": "{\"P8E80F9AEF21F6940\":\"Loki logs for Ethereum services\"}",
+        "HTTP_TIMEOUT_MS": "15000"
       }
     }
   }
@@ -46,9 +50,12 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 
 ### Environment Variables
 
-- `GRAFANA_SERVICE_TOKEN_ENV_VAR` (optional): The name of the environment variable containing your Grafana token (defaults to `GRAFANA_SERVICE_TOKEN`)
-- `GRAFANA_URL` (optional): Grafana API URL (defaults to `https://grafana.primary.production.platform.ethpandaops.io`)
-- `DATASOURCE_UIDS` (optional): Comma-separated list of datasource UIDs to enable. If not set, all discovered datasources are enabled.
+- `GRAFANA_SERVICE_TOKEN_ENV_VAR` (optional): The name of the env var containing your Grafana token (default: `GRAFANA_SERVICE_TOKEN`).
+- `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
+- `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
+- `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
+- `DATASOURCE_DESCRIPTIONS_PATH` (optional): Path to a JSON file with the same map; merged with `DATASOURCE_DESCRIPTIONS`.
+- `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
 
 The server reads the token from the environment variable specified in `GRAFANA_SERVICE_TOKEN_ENV_VAR`. This allows you to use different token environment variables for different environments.
 
@@ -57,8 +64,10 @@ The server reads the token from the environment variable specified in `GRAFANA_S
 On startup, the server:
 1. Connects to Grafana using your service token
 2. Discovers all available datasources
-3. Filters by `DATASOURCE_UIDS` if specified
-4. Logs which datasources are available
+3. Normalizes types to `loki`, `prometheus`, or `clickhouse`
+4. Applies descriptions from env/file
+5. Filters by `DATASOURCE_UIDS` if specified
+6. Logs which datasources are available
 
 ### Enabling Specific Datasources
 
@@ -74,7 +83,7 @@ To enable only specific datasources by their UID:
       ],
       "env": {
         "GRAFANA_SERVICE_TOKEN_ENV_VAR": "ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN",
-        "DATASOURCE_UIDS": "P8E80F9AEF21F6940,another-uid-here"
+        "DATASOURCE_UIDS": "P8E80F9AEF21F6940, another-uid-here"
       }
     }
   }
@@ -83,50 +92,25 @@ To enable only specific datasources by their UID:
 
 ## Available Tools
 
-### Loki Tools
+### Tools
 
-All Loki tools support an optional `datasource_uid` parameter to specify which datasource to query when multiple are available.
+- `list_datasources`
+  - List all discovered datasources (UID, name, type, description).
+  - Params: `type` (optional: `loki` | `prometheus` | `clickhouse`).
 
-#### `loki_query`
-Query logs from Loki datasource.
+- `loki_tool`
+  - Actions: `query`, `labels`, `label_values`.
+  - Common params: `start` (default: `now-1h`), `end` (default: `now`), `datasource_uid` (required if multiple Loki datasources).
+  - For `query`: `query` (LogQL), `limit` (default: 100).
+  - For `label_values`: `label`.
 
-Parameters:
-- `query` (required): LogQL query string
-- `start`: Start time (default: "now-1h"). Accepts:
-  - Relative time: "now-1h", "now-30m", "now-7d"
-  - RFC3339 format: "2024-01-01T00:00:00Z"
-- `end`: End time (default: "now")
-- `limit`: Maximum number of log lines to return (default: 100)
-- `datasource_uid` (optional): Specific datasource UID to use
+- `prometheus_tool`
+  - Modes: `instant` or `range`.
+  - Params: `query` (PromQL), `mode`, `time` (instant), `start`, `end`, `step` (range), `datasource_uid`.
 
-Example:
-```
-Query: {job="ethereum"} |= "error"
-Start: now-6h
-End: now
-```
-
-#### `loki_labels`
-Get available labels from Loki.
-
-Parameters:
-- `start`: Start time (default: "now-1h")
-- `end`: End time (default: "now")
-- `datasource_uid` (optional): Specific datasource UID to use
-
-#### `loki_label_values`
-Get values for a specific label.
-
-Parameters:
-- `label` (required): Label name to get values for
-- `start`: Start time (default: "now-1h")
-- `end`: End time (default: "now")
-- `datasource_uid` (optional): Specific datasource UID to use
-
-Example:
-```
-Label: job
-```
+- `clickhouse_tool`
+  - Params: `sql` (required), `from` (default: `now-1h`), `to` (default: `now`), `datasource_uid`.
+  - Uses Grafana’s unified data query API; requires a ClickHouse datasource that supports raw SQL in Grafana.
 
 ## Adding New Datasource Types
 
@@ -164,15 +148,28 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN=your-token
 GRAFANA_SERVICE_TOKEN_ENV_VAR=ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN node index.js
 ```
 
+### Testing
+
+Slim unit tests use Node’s built-in test runner (no extra deps):
+
+```bash
+cd tools/mcp-servers/ethpandaops-data
+npm test
+```
+
+Tests cover pure helpers (time parsing, duration parsing, type normalization) and UID selection logic; they do not make network calls.
+
 ## Troubleshooting
 
 1. **Authentication errors**: Ensure your token environment variable is set and the token has the necessary permissions.
 
 2. **No datasources discovered**: Check that your token has access to list datasources in Grafana.
+   - Verify types are among `loki`, `prometheus`, or `clickhouse` (normalized).
 
 3. **Datasource not found**: The server will log all discovered datasources on startup. Check that your desired datasource appears in the list.
 
 4. **Connection issues**: Verify you can reach the Grafana instance and that your network allows the connection.
+5. **ClickHouse errors**: The query model may differ by plugin; errors from Grafana will be surfaced. You may need to adjust the SQL or plugin-specific model in the server if your ClickHouse plugin doesn’t support raw SQL via the unified API.
 
 ## License
 
