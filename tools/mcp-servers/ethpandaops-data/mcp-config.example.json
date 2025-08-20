@@ -1,0 +1,13 @@
+{
+  "ethpandaops-data": {
+    "command": "node",
+    "args": [
+      "/path/to/ai-cookbook/tools/mcp-servers/ethpandaops-data/index.js"
+    ],
+    "env": {
+      "GRAFANA_SERVICE_TOKEN_ENV_VAR": "ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN",
+      "GRAFANA_URL": "https://grafana.primary.production.platform.ethpandaops.io",
+      "DATASOURCE_UIDS": ""
+    }
+  }
+}
