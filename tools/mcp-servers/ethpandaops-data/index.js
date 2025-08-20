@@ -4,7 +4,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import axios from 'axios';
-import fs from 'node:fs';
 import { parseTime, parseDurationToSeconds, normalizeType, requireUidForType as baseRequireUidForType } from './utils.js';
 
 const GRAFANA_URL = process.env.GRAFANA_URL || 'https://grafana.primary.production.platform.ethpandaops.io';
@@ -15,7 +14,6 @@ const DATASOURCE_CONFIG = process.env.DATASOURCE_UIDS
   ? process.env.DATASOURCE_UIDS.split(',').map((s) => s.trim()).filter(Boolean)
   : [];
 const DESCRIPTIONS_JSON = process.env.DATASOURCE_DESCRIPTIONS || '';
-const DESCRIPTIONS_PATH = process.env.DATASOURCE_DESCRIPTIONS_PATH || '';
 const HTTP_TIMEOUT_MS = process.env.HTTP_TIMEOUT_MS ? parseInt(process.env.HTTP_TIMEOUT_MS) : 15000;
 
 // Datasources will be populated from Grafana API
@@ -118,16 +116,6 @@ function parseDurationToSeconds(input) {
 
 function loadDescriptions() {
   const map = {};
-  try {
-    if (DESCRIPTIONS_PATH) {
-      if (fs.existsSync(DESCRIPTIONS_PATH)) {
-        const raw = fs.readFileSync(DESCRIPTIONS_PATH, 'utf8');
-        Object.assign(map, JSON.parse(raw));
-      }
-    }
-  } catch (e) {
-    console.error('Failed to load descriptions from file:', e.message);
-  }
   try {
     if (DESCRIPTIONS_JSON) {
       Object.assign(map, JSON.parse(DESCRIPTIONS_JSON));

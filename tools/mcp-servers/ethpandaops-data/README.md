@@ -54,7 +54,6 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 - `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
-- `DATASOURCE_DESCRIPTIONS_PATH` (optional): Path to a JSON file with the same map; merged with `DATASOURCE_DESCRIPTIONS`.
 - `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
 
 The server reads the token from the environment variable specified in `GRAFANA_SERVICE_TOKEN_ENV_VAR`. This allows you to use different token environment variables for different environments.
