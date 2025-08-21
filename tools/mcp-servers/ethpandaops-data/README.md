@@ -76,14 +76,14 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 
 ### Environment Variables
 
-- `GRAFANA_SERVICE_TOKEN` or `GRAFANA_TOKEN`: Set either directly with your token.
-- `GRAFANA_SERVICE_TOKEN_ENV_VAR` (optional): Name of an env var that contains your token. If you set this to an actual token value, the server will use it directly.
+- `GRAFANA_SERVICE_TOKEN`: Your Grafana service token (required).
+- `GRAFANA_SERVICE_TOKEN_ENV_VAR` (optional): Name of an environment variable that contains your token. Use this for indirect token configuration.
 - `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
 - `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
 
-Token resolution order: `GRAFANA_SERVICE_TOKEN` → `GRAFANA_TOKEN` → value of env named by `GRAFANA_SERVICE_TOKEN_ENV_VAR` → `GRAFANA_SERVICE_TOKEN_ENV_VAR` itself (if it looks like a token).
+Token configuration: Either set `GRAFANA_SERVICE_TOKEN` directly, or use `GRAFANA_SERVICE_TOKEN_ENV_VAR` to specify which environment variable contains your token.
 
 ### Automatic Datasource Discovery
 
@@ -175,15 +175,12 @@ const toolHandlers = {
 
 Run the server locally for testing:
 ```bash
-# Option A: direct
+# Option A: Direct token
 GRAFANA_SERVICE_TOKEN=your-token node index.js
 
-# Option B: indirection
-export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN=your-token
-GRAFANA_SERVICE_TOKEN_ENV_VAR=ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN node index.js
-
-# Option C: put the token directly in the hint
-GRAFANA_SERVICE_TOKEN_ENV_VAR=your-token node index.js
+# Option B: Indirect via environment variable
+export MY_GRAFANA_TOKEN=your-token
+GRAFANA_SERVICE_TOKEN_ENV_VAR=MY_GRAFANA_TOKEN node index.js
 ```
 
 ### Testing

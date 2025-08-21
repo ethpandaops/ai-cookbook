@@ -7,25 +7,9 @@ import axios from 'axios';
 import { parseTime, parseDurationToSeconds, normalizeType, requireUidForType as baseRequireUidForType } from './utils.js';
 
 const GRAFANA_URL = process.env.GRAFANA_URL || 'https://grafana.primary.production.platform.ethpandaops.io';
-// Token resolution: supports several patterns for convenience
-const TOKEN_ENV_HINT = process.env.GRAFANA_SERVICE_TOKEN_ENV_VAR; // may be a var name or the token itself
-function resolveGrafanaToken() {
-  // Common direct env names
-  let token = process.env.GRAFANA_SERVICE_TOKEN || process.env.GRAFANA_TOKEN;
-  if (!token && TOKEN_ENV_HINT) {
-    // If hint names an env var that exists, use its value
-    if (process.env[TOKEN_ENV_HINT]) {
-      token = process.env[TOKEN_ENV_HINT];
-    } else {
-      // If hint looks like a token, accept it directly
-      if (TOKEN_ENV_HINT.startsWith('glsa_') || TOKEN_ENV_HINT.length > 24) {
-        token = TOKEN_ENV_HINT;
-      }
-    }
-  }
-  return token;
-}
-const GRAFANA_TOKEN = resolveGrafanaToken();
+// Simple token resolution: either direct or via named env var
+const TOKEN_ENV_VAR = process.env.GRAFANA_SERVICE_TOKEN_ENV_VAR;
+const GRAFANA_TOKEN = process.env.GRAFANA_SERVICE_TOKEN || (TOKEN_ENV_VAR ? process.env[TOKEN_ENV_VAR] : null);
 const DATASOURCE_CONFIG = process.env.DATASOURCE_UIDS
   ? process.env.DATASOURCE_UIDS.split(',').map((s) => s.trim()).filter(Boolean)
   : [];
@@ -160,7 +144,7 @@ const toolHandlers = {
         return {
           healthy: false,
           error: 'No Grafana service token configured',
-          help: 'Please set GRAFANA_SERVICE_TOKEN or GRAFANA_TOKEN environment variable'
+          help: 'Please set GRAFANA_SERVICE_TOKEN environment variable or use GRAFANA_SERVICE_TOKEN_ENV_VAR to specify which env var contains the token'
         };
       }
 
@@ -430,12 +414,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   if (!GRAFANA_TOKEN) {
-    console.error('Error: Grafana token not found.');
-    console.error('Set one of:');
+    console.error('Error: Grafana token not configured.');
+    console.error('Set either:');
     console.error(' - GRAFANA_SERVICE_TOKEN=<token>');
-    console.error(' - GRAFANA_TOKEN=<token>');
-    console.error(' - GRAFANA_SERVICE_TOKEN_ENV_VAR=<ENV_VAR_NAME_WITH_TOKEN>');
-    console.error('   (or set GRAFANA_SERVICE_TOKEN_ENV_VAR directly to the token)');
+    console.error(' - GRAFANA_SERVICE_TOKEN_ENV_VAR=<ENV_VAR_NAME> (where ENV_VAR_NAME contains the token)');
     process.exit(1);
   }
   // Discover datasources on startup
