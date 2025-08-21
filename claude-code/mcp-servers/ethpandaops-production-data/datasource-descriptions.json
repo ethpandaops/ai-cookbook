@@ -1,10 +1,6 @@
 {
-  "primary-loki": "Primary Loki instance for platform logs, contains all container logs from the production environment",
-  "primary-prometheus": "Primary Prometheus instance for platform metrics, monitors all production services and infrastructure",
-  "primary-clickhouse": "Primary ClickHouse database for analytics and long-term storage of platform data",
-  "charon-loki": "Loki instance dedicated to Charon distributed validator logs",
-  "charon-prometheus": "Prometheus instance for Charon distributed validator metrics",
-  "ethereum-metrics": "Prometheus instance for Ethereum network metrics including validator performance, attestations, and chain data",
-  "xatu-clickhouse": "ClickHouse database for Xatu (Ethereum network observer) data including blocks, transactions, and network analysis",
-  "beacon-api-clickhouse": "ClickHouse database for beacon chain API data and historical state information"
+  "PDE22E36FB877C574": "Clickhouse database. Runs in a sharded, replicated cluster. Contains mostly Xatu data. You MUST fetch the contents of https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms.txt when working with Xatu data. You MUST ALWAYS filter by the partition key of the table when querying otherwise you will scan the entire table. Fetch the CREATE TABLE statement from https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/schema/clickhouse/$DATABASE/$TABLE.sql. Since this cluster is running distributed you MUST use CTEs and other forms of querying that work with a sharded, distributed cluster. AVOID GLOBAL JOINS AT ALL COSTS. ",
+  "P8E80F9AEF21F6940": "Loki cluster. Contains all container logs. You MUST filter by a label. Common labels are `ingress_user` (which is essentially the 'cluster' name), container, pod & namespace (when working with Kubernetes logs). Data is split in to 2 realms: 'platform' and 'devnets'. Devnet data will have a `network` label and runs on bare metal VMs with docker and ansible.. Platform data is all Kubernetes.",
+  "P4169E866C3094E38": "VictoriaMetrics cluster containing 'platform' metrics. You MUST filter by a label. Common labels are `ingress_user` (which is essentially the 'cluster' name), container, pod & namespace (when working with Kubernetes logs). Data is split in to 2 realms: 'platform' and 'devnets'. Devnet data will have a `network` label and runs on bare metal VMs with docker and ansible.. Platform data is all Kubernetes.",
+  "P3893C6D10EAD8176": "Prometheus cluster containing 'Devnet' metrics. You MUST filter by a label. Common labels are `ingress_user` (which is essentially the 'cluster' name), container, pod & namespace (when working with Kubernetes logs). Data is split in to 2 realms: 'platform' and 'devnets'. Devnet data will have a `network` label and runs on bare metal VMs with docker and ansible.. Platform data is all Kubernetes."
 }

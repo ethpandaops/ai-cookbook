@@ -3,6 +3,7 @@
   "description": "Access ethPandaOps production Grafana datasources (Loki, Prometheus, ClickHouse)",
   "implementation": "tools/mcp-servers/ethpandaops-data",
   "entry_point": "index.js",
+  "version": "1.0.0",
   "config_prompts": {
     "grafana_url": {
       "prompt": "Grafana URL",
