@@ -7,11 +7,37 @@ A minimal MCP (Model Context Protocol) server that provides access to ethPandaOp
 - **Automatic datasource discovery** - Connects to Grafana and discovers Loki, Prometheus, and ClickHouse datasources
 - **Single tool per type** - Minimal, consistent tool surface for each datasource type
 - **Datasource listing** - `list_datasources` to enumerate UIDs, names, and descriptions
+- **Health check** - `health_check` to verify connection and authentication
 - **Flexible configuration** - Use env vars to filter UIDs and provide descriptions
 - **Token management** - Configure which environment variable contains your Grafana token
 - **Multi-datasource support** - Pass `datasource_uid` when there are multiple of a type
+- **ai-cookbook integration** - Automated installation and configuration via ai-cookbook
 
 ## Installation
+
+### Option 1: Using ai-cookbook installer (Recommended)
+
+```bash
+# Install ai-cookbook if not already installed
+cd /path/to/ai-cookbook
+python setup.py install
+
+# Run the interactive installer
+ai-cookbook
+
+# Select "MCP Servers" -> "Install ethpandaops-data"
+# Follow the prompts to configure Grafana URL and service token
+```
+
+The installer will:
+- Install npm dependencies automatically
+- Prompt for Grafana URL (with sensible defaults)
+- Prompt for service token
+- Test the connection
+- Configure Claude Desktop automatically
+- Load datasource descriptions from ai-cookbook/data/ethpandaops/
+
+### Option 2: Manual Installation
 
 1. Install dependencies:
 ```bash
@@ -50,13 +76,14 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 
 ### Environment Variables
 
-- `GRAFANA_SERVICE_TOKEN_ENV_VAR` (optional): The name of the env var containing your Grafana token (default: `GRAFANA_SERVICE_TOKEN`).
+- `GRAFANA_SERVICE_TOKEN` or `GRAFANA_TOKEN`: Set either directly with your token.
+- `GRAFANA_SERVICE_TOKEN_ENV_VAR` (optional): Name of an env var that contains your token. If you set this to an actual token value, the server will use it directly.
 - `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
 - `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
 
-The server reads the token from the environment variable specified in `GRAFANA_SERVICE_TOKEN_ENV_VAR`. This allows you to use different token environment variables for different environments.
+Token resolution order: `GRAFANA_SERVICE_TOKEN` → `GRAFANA_TOKEN` → value of env named by `GRAFANA_SERVICE_TOKEN_ENV_VAR` → `GRAFANA_SERVICE_TOKEN_ENV_VAR` itself (if it looks like a token).
 
 ### Automatic Datasource Discovery
 
@@ -92,6 +119,11 @@ To enable only specific datasources by their UID:
 ## Available Tools
 
 ### Tools
+
+- `health_check`
+  - Verify connection to Grafana and check authentication status.
+  - Returns: `healthy` (boolean), `grafana_url`, `authenticated`, `user`, `datasources_discovered`, error messages and help.
+  - No parameters required.
 
 - `list_datasources`
   - List all discovered datasources (UID, name, type, description).
@@ -143,8 +175,15 @@ const toolHandlers = {
 
 Run the server locally for testing:
 ```bash
+# Option A: direct
+GRAFANA_SERVICE_TOKEN=your-token node index.js
+
+# Option B: indirection
 export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN=your-token
 GRAFANA_SERVICE_TOKEN_ENV_VAR=ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN node index.js
+
+# Option C: put the token directly in the hint
+GRAFANA_SERVICE_TOKEN_ENV_VAR=your-token node index.js
 ```
 
 ### Testing
@@ -160,7 +199,26 @@ Tests cover pure helpers (time parsing, duration parsing, type normalization) an
 
 ## Troubleshooting
 
+### Using the health check
+
+The `health_check` tool can help diagnose connection issues:
+
+```javascript
+// In Claude Desktop, after installing the MCP server
+await health_check()
+```
+
+This will return:
+- Connection status to Grafana
+- Authentication status
+- Number of discovered datasources
+- Helpful error messages if something is wrong
+
+### Common Issues
+
 1. **Authentication errors**: Ensure your token environment variable is set and the token has the necessary permissions.
+   - Create a service token at: `<GRAFANA_URL>/org/serviceaccounts`
+   - Ensure the token has at least 'Viewer' role
 
 2. **No datasources discovered**: Check that your token has access to list datasources in Grafana.
    - Verify types are among `loki`, `prometheus`, or `clickhouse` (normalized).

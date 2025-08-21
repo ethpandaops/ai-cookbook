@@ -1,0 +1,20 @@
+{
+  "name": "ethpandaops-production-data",
+  "description": "Access ethPandaOps production Grafana datasources (Loki, Prometheus, ClickHouse)",
+  "implementation": "tools/mcp-servers/ethpandaops-data",
+  "entry_point": "index.js",
+  "config_prompts": {
+    "grafana_url": {
+      "prompt": "Grafana URL",
+      "default": "https://grafana.primary.production.platform.ethpandaops.io",
+      "description": "URL to your Grafana instance"
+    },
+    "service_token": {
+      "prompt": "Grafana service token (glsa_...)",
+      "required": true,
+      "secret": true,
+      "description": "Service token for Grafana authentication",
+      "help_url": "https://grafana.primary.production.platform.ethpandaops.io/org/serviceaccounts"
+    }
+  }
+}

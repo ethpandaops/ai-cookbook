@@ -1,0 +1,10 @@
+{
+  "primary-loki": "Primary Loki instance for platform logs, contains all container logs from the production environment",
+  "primary-prometheus": "Primary Prometheus instance for platform metrics, monitors all production services and infrastructure",
+  "primary-clickhouse": "Primary ClickHouse database for analytics and long-term storage of platform data",
+  "charon-loki": "Loki instance dedicated to Charon distributed validator logs",
+  "charon-prometheus": "Prometheus instance for Charon distributed validator metrics",
+  "ethereum-metrics": "Prometheus instance for Ethereum network metrics including validator performance, attestations, and chain data",
+  "xatu-clickhouse": "ClickHouse database for Xatu (Ethereum network observer) data including blocks, transactions, and network analysis",
+  "beacon-api-clickhouse": "ClickHouse database for beacon chain API data and historical state information"
+}

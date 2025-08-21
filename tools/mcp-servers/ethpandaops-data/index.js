@@ -7,9 +7,25 @@ import axios from 'axios';
 import { parseTime, parseDurationToSeconds, normalizeType, requireUidForType as baseRequireUidForType } from './utils.js';
 
 const GRAFANA_URL = process.env.GRAFANA_URL || 'https://grafana.primary.production.platform.ethpandaops.io';
-// Read the token from the env var specified in GRAFANA_SERVICE_TOKEN_ENV_VAR
-const TOKEN_ENV_VAR = process.env.GRAFANA_SERVICE_TOKEN_ENV_VAR || 'GRAFANA_SERVICE_TOKEN';
-const GRAFANA_TOKEN = process.env[TOKEN_ENV_VAR];
+// Token resolution: supports several patterns for convenience
+const TOKEN_ENV_HINT = process.env.GRAFANA_SERVICE_TOKEN_ENV_VAR; // may be a var name or the token itself
+function resolveGrafanaToken() {
+  // Common direct env names
+  let token = process.env.GRAFANA_SERVICE_TOKEN || process.env.GRAFANA_TOKEN;
+  if (!token && TOKEN_ENV_HINT) {
+    // If hint names an env var that exists, use its value
+    if (process.env[TOKEN_ENV_HINT]) {
+      token = process.env[TOKEN_ENV_HINT];
+    } else {
+      // If hint looks like a token, accept it directly
+      if (TOKEN_ENV_HINT.startsWith('glsa_') || TOKEN_ENV_HINT.length > 24) {
+        token = TOKEN_ENV_HINT;
+      }
+    }
+  }
+  return token;
+}
+const GRAFANA_TOKEN = resolveGrafanaToken();
 const DATASOURCE_CONFIG = process.env.DATASOURCE_UIDS
   ? process.env.DATASOURCE_UIDS.split(',').map((s) => s.trim()).filter(Boolean)
   : [];
@@ -23,11 +39,6 @@ let enabledDatasources = {};
 
 // Optional manual descriptions map { uid: description }
 let DATASOURCE_DESCRIPTIONS = {};
-
-if (!GRAFANA_TOKEN) {
-  console.error(`Error: ${TOKEN_ENV_VAR} environment variable is required`);
-  process.exit(1);
-}
 
 const server = new Server(
   {
@@ -68,51 +79,7 @@ async function grafanaDsQueryPost(body) {
   return res.data;
 }
 
-// Parse time strings (now, now-1h, RFC3339, etc.)
-function parseTime(timeStr) {
-  if (!timeStr || timeStr === 'now') {
-    return Date.now() * 1000000; // nanoseconds
-  }
-  
-  if (timeStr.startsWith('now-')) {
-    const duration = timeStr.substring(4);
-    const match = duration.match(/^(\d+)([smhd])$/);
-    if (match) {
-      const value = parseInt(match[1]);
-      const unit = match[2];
-      const ms = {
-        's': value * 1000,
-        'm': value * 60 * 1000,
-        'h': value * 60 * 60 * 1000,
-        'd': value * 24 * 60 * 60 * 1000,
-      }[unit];
-      return (Date.now() - ms) * 1000000;
-    }
-  }
-  
-  // Try parsing as RFC3339
-  const date = new Date(timeStr);
-  if (!isNaN(date.getTime())) {
-    return date.getTime() * 1000000;
-  }
-  
-  throw new Error(`Invalid time format: ${timeStr}`);
-}
-
-function parseDurationToSeconds(input) {
-  if (!input) return 30; // default 30s
-  if (typeof input === 'number') return input;
-  const m = String(input).match(/^(\d+)([smhd])$/);
-  if (!m) {
-    const n = Number(input);
-    if (!isNaN(n)) return n;
-    throw new Error(`Invalid duration: ${input}`);
-  }
-  const val = parseInt(m[1]);
-  const unit = m[2];
-  const mult = unit === 's' ? 1 : unit === 'm' ? 60 : unit === 'h' ? 3600 : 86400;
-  return val * mult;
-}
+// parseTime and parseDurationToSeconds imported from utils.js
 
 function loadDescriptions() {
   const map = {};
@@ -137,6 +104,11 @@ async function discoverDatasources() {
     const found = {};
     for (const ds of datasources) {
       const typeNormalized = normalizeType(ds.type);
+      // Exclude grafana-clickhouse-datasource as it has issues with the query format
+      if (ds.type === 'grafana-clickhouse-datasource') {
+        console.error(`  Skipping ${ds.name} (${ds.type}) - incompatible datasource type`);
+        continue;
+      }
       if (["loki","prometheus","clickhouse"].includes(typeNormalized)) {
         found[ds.uid] = {
           uid: ds.uid,
@@ -180,6 +152,56 @@ function firstUidOfType(typeNorm) {
 const requireUidForType = (typeNorm, provided, dsMap = enabledDatasources) => baseRequireUidForType(typeNorm, provided, dsMap);
 
 const toolHandlers = {
+  // Health check tool to verify connection to Grafana
+  async health_check() {
+    try {
+      // Check if we have a token
+      if (!GRAFANA_TOKEN) {
+        return {
+          healthy: false,
+          error: 'No Grafana service token configured',
+          help: 'Please set GRAFANA_SERVICE_TOKEN or GRAFANA_TOKEN environment variable'
+        };
+      }
+
+      // Try to fetch user info to verify authentication
+      const userInfo = await grafanaGet('/user');
+      
+      // Check datasources
+      const datasourceCount = Object.keys(enabledDatasources).length;
+      
+      // Determine health status
+      const healthy = datasourceCount > 0;
+      const status = datasourceCount === 0 ? 'warning' : 'healthy';
+      
+      return {
+        healthy: healthy,
+        status: status,
+        grafana_url: GRAFANA_URL,
+        authenticated: true,
+        user: userInfo.login || userInfo.name,
+        datasources_discovered: datasourceCount,
+        datasources: Object.values(enabledDatasources).map(ds => ({
+          name: ds.name,
+          type: ds.typeNormalized,
+          uid: ds.uid
+        })),
+        message: datasourceCount === 0 
+          ? 'Connected to Grafana but no datasources discovered. Check permissions or datasource configuration.'
+          : `Successfully connected. ${datasourceCount} datasource(s) available.`
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        error: error.message,
+        grafana_url: GRAFANA_URL,
+        help: error.response?.status === 401 
+          ? 'Authentication failed. Please check your Grafana service token. You can create one at: ' + GRAFANA_URL + '/org/serviceaccounts'
+          : 'Failed to connect to Grafana. Please check your GRAFANA_URL and network connection.'
+      };
+    }
+  },
+
   // List discovered datasources with optional type filter
   async list_datasources({ type } = {}) {
     const list = Object.values(enabledDatasources)
@@ -231,23 +253,67 @@ const toolHandlers = {
   async clickhouse_tool({ sql, from = 'now-1h', to = 'now', datasource_uid }) {
     const datasourceUid = requireUidForType('clickhouse', datasource_uid);
     if (!sql) throw new Error('sql is required');
+    
+    // Basic SQL injection prevention
+    const dangerousPatterns = [
+      ';--', '/*', '*/', 'xp_', 'sp_', 
+      'exec(', 'execute(', 'eval(', 
+      'drop table', 'drop database', 'truncate',
+      'insert into', 'update set', 'delete from'
+    ];
+    
+    const sqlLower = sql.toLowerCase();
+    for (const pattern of dangerousPatterns) {
+      if (sqlLower.includes(pattern)) {
+        throw new Error(`SQL query contains potentially dangerous pattern: ${pattern}. Only SELECT queries are allowed.`);
+      }
+    }
+    
+    // Ensure it's a SELECT query
+    if (!sqlLower.trim().startsWith('select') && !sqlLower.trim().startsWith('with')) {
+      throw new Error('Only SELECT and WITH queries are allowed for safety reasons.');
+    }
     const fromMs = Math.floor(parseTime(from) / 1e6);
     const toMs = Math.floor(parseTime(to) / 1e6);
     const ds = enabledDatasources[datasourceUid];
-    const body = {
-      from: String(fromMs),
-      to: String(toMs),
-      queries: [
-        {
-          refId: 'A',
-          datasource: { uid: datasourceUid, type: ds.type },
-          queryType: 'sql',
-          editorMode: 'code',
-          format: 'table',
-          rawSql: sql,
-        },
-      ],
-    };
+    
+    // Handle different ClickHouse datasource types differently
+    let body;
+    if (ds.type === 'vertamedia-clickhouse-datasource') {
+      // Altinity plugin expects different format
+      body = {
+        from: String(fromMs),
+        to: String(toMs),
+        queries: [
+          {
+            refId: 'A',
+            datasource: { uid: datasourceUid, type: ds.type },
+            query: sql,
+            format: 'table',
+            intervalMs: 1000,
+            maxDataPoints: 1000,
+          },
+        ],
+      };
+    } else {
+      // Grafana native ClickHouse datasource
+      body = {
+        from: String(fromMs),
+        to: String(toMs),
+        queries: [
+          {
+            refId: 'A',
+            datasource: { uid: datasourceUid, type: ds.type },
+            queryType: 'sql',
+            editorMode: 'code',
+            format: 'table',
+            intervalMs: 1000,
+            maxDataPoints: 1000,
+            rawSql: sql,
+          },
+        ],
+      };
+    }
     return await grafanaDsQueryPost(body);
   },
 };
@@ -256,6 +322,14 @@ const toolHandlers = {
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   // Consolidated tools: one per type + listing tool
   const tools = [
+    {
+      name: 'health_check',
+      description: 'Check connection to Grafana and verify authentication',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+    },
     {
       name: 'list_datasources',
       description: 'List discovered datasources with optional type filter',
@@ -336,12 +410,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       ],
     };
   } catch (error) {
-    console.error(`Tool '${name}' error:`, error?.response?.data || error.message);
+    const errDetails = {
+      message: error.message,
+      status: error?.response?.status,
+      statusText: error?.response?.statusText,
+      data: error?.response?.data,
+    };
+    console.error(`Tool '${name}' error:`, errDetails);
     return {
       content: [
         {
           type: 'text',
-          text: `Error: ${error.message}`,
+          text: JSON.stringify({ error: errDetails }, null, 2),
         },
       ],
     };
@@ -350,7 +430,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
 async function main() {
   if (!GRAFANA_TOKEN) {
-    console.error(`Error: ${TOKEN_ENV_VAR} environment variable is required`);
+    console.error('Error: Grafana token not found.');
+    console.error('Set one of:');
+    console.error(' - GRAFANA_SERVICE_TOKEN=<token>');
+    console.error(' - GRAFANA_TOKEN=<token>');
+    console.error(' - GRAFANA_SERVICE_TOKEN_ENV_VAR=<ENV_VAR_NAME_WITH_TOKEN>');
+    console.error('   (or set GRAFANA_SERVICE_TOKEN_ENV_VAR directly to the token)');
     process.exit(1);
   }
   // Discover datasources on startup
