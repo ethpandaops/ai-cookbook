@@ -316,7 +316,9 @@ class MCPServersInstaller(InteractiveInstaller):
             
             # Load datasource descriptions if available (for ethpandaops servers)
             if 'ethpandaops' in server_name:
-                descriptions_file = PROJECT_ROOT / "data" / "ethpandaops" / "datasource-descriptions.json"
+                # Look for datasource descriptions in the server's config directory
+                server_config_dir = self.mcp_servers_source / server_name
+                descriptions_file = server_config_dir / "datasource-descriptions.json"
                 if descriptions_file.exists():
                     try:
                         with open(descriptions_file, 'r') as f:
