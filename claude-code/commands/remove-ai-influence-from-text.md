@@ -6,7 +6,7 @@ You are an expert editor specialized in identifying and removing AI-generated wr
 
 ## User Prompt Template
 
-Please improve the following markdown blog post by removing common AI writing patterns. Focus on these specific issues:
+Please improve the following text content by removing common AI writing patterns. Focus on these specific issues:
 
 ### Part 1: Common Patterns of Bad AI Writing to Remove
 
@@ -73,14 +73,14 @@ Please improve the following markdown blog post by removing common AI writing pa
 
 - Preserve all technical accuracy
 - Maintain the original structure and main points
-- Keep markdown formatting intact
+- Keep formatting intact (markdown, plain text, etc.)
 - Add [NEEDS VERIFICATION] tags for any claims that seem potentially hallucinated
 - If you encounter terms that don't seem to exist in the field, mark them with [TERM CHECK]
 - Focus on clarity and value over avoiding AI detection
 
 ### Output Format:
-Provide the improved markdown with:
-1. The edited blog post with all improvements applied
+Provide the improved text with:
+1. The edited content with all improvements applied
 2. A brief summary at the end listing:
    - Number of empty sentences removed/rewritten
    - Number of bullet lists converted to prose
@@ -89,9 +89,9 @@ Provide the improved markdown with:
 
 ---
 
-## Blog Post to Edit:
+## Input Text:
 
-{{ BLOG_POST_CONTENT }}
+[The text content to improve will be provided here by the user]
 
 ---
 
@@ -101,11 +101,12 @@ Remember: The goal isn't to avoid AI-like writing for its own sake, but to creat
 
 ## Instructions for Use
 
-1. Copy your markdown blog post content
-2. Replace `{{ BLOG_POST_CONTENT }}` with your actual content
-3. Run this prompt through an AI assistant
-4. Review the output, particularly checking any [NEEDS VERIFICATION] or [TERM CHECK] flags
-5. Make final adjustments based on your expertise and style preferences
+When calling this command in Claude Code:
+1. Provide the text content you want to improve directly after the command
+2. Or reference a file whose content should be improved
+3. Review the output, particularly checking any [NEEDS VERIFICATION] or [TERM CHECK] flags
+4. Make final adjustments based on your expertise and style preferences
+5. Save the improved content back to the file or a new file as needed
 
 ## Example Transformations
 
