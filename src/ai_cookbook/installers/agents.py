@@ -154,9 +154,11 @@ class AgentsInstaller(BaseInstaller):
             # Copy agent file
             shutil.copy2(agent_file, agent_target_file)
             
-            # Update metadata
+            # Update metadata for the actual file path
             if self.update_detector:
-                self.update_detector.update_metadata(agent_name, agent_file)
+                # Store metadata for "agent_name/agent.md" not just "agent_name"
+                metadata_key = f"{agent_name}/agent.md"
+                self.update_detector.update_metadata(metadata_key, agent_file)
             
             details = {
                 'agent': agent_name,
@@ -199,9 +201,10 @@ class AgentsInstaller(BaseInstaller):
             # Remove agent directory
             shutil.rmtree(agent_target_dir)
             
-            # Remove metadata
+            # Remove metadata for the actual file path
             if self.update_detector:
-                self.update_detector.remove_metadata(agent_name)
+                metadata_key = f"{agent_name}/agent.md"
+                self.update_detector.remove_metadata(metadata_key)
             
             details = {
                 'agent': agent_name
