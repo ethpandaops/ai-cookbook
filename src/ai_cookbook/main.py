@@ -63,6 +63,7 @@ def check_for_updates(skip_prompt: bool = False) -> None:
         from .installers.commands import CommandsInstaller
         from .installers.code_standards import CodeStandardsInstaller
         from .installers.hooks import HooksInstaller
+        from .installers.agents import AgentsInstaller
         from .installers.scripts import ScriptsInstaller
         from .updaters.detector import UpdateDetector
         
@@ -71,6 +72,7 @@ def check_for_updates(skip_prompt: bool = False) -> None:
             'commands': CommandsInstaller(),
             'code_standards': CodeStandardsInstaller(),
             'hooks': HooksInstaller(),
+            'agents': AgentsInstaller(),
             'scripts': ScriptsInstaller()
         }
         
@@ -259,6 +261,7 @@ def main() -> None:
         print("  • Claude Commands - AI-assisted development commands")
         print("  • Code Standards - Language-specific coding standards")  
         print("  • Hooks - Automated formatting and linting")
+        print("  • Claude Agents - Specialized AI assistants")
         print("  • Scripts - Add utility scripts to PATH")
         print()
         print("Usage:")

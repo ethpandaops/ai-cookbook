@@ -8,6 +8,8 @@ from ..installers.base import InteractiveInstaller, InstallationResult
 from ..installers.commands import CommandsInstaller
 from ..installers.code_standards import CodeStandardsInstaller
 from ..installers.hooks import HooksInstaller
+from ..installers.agents import AgentsInstaller
+from ..installers.mcp_servers import MCPServersInstaller
 from ..installers.scripts import ScriptsInstaller
 from ..utils.file_operations import file_exists
 from ..config.settings import ORG_NAME, ORG_DISPLAY_NAME
@@ -35,6 +37,8 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             'commands': CommandsInstaller(),
             'code_standards': CodeStandardsInstaller(),
             'hooks': HooksInstaller(),
+            'agents': AgentsInstaller(),
+            'mcp_servers': MCPServersInstaller(),
             'scripts': ScriptsInstaller()
         }
         
@@ -72,6 +76,8 @@ class RecommendedToolsInstaller(InteractiveInstaller):
                     'commands': config.get('commands', []),
                     'code_standards': config.get('code_standards', []),
                     'hooks': config.get('hooks', []),
+                    'agents': config.get('agents', []),
+                    'mcp_servers': config.get('mcp_servers', []),
                     'scripts': config.get('scripts', [])
                 },
                 'installed_tools': {},
@@ -96,6 +102,9 @@ class RecommendedToolsInstaller(InteractiveInstaller):
                         installed = set(['all'])
                     else:
                         installed = set()
+                elif installer_name == 'mcp_servers':
+                    # For MCP servers, get installed server names
+                    installed = set(installer_status.get('installed_servers', {}).keys())
                 else:
                     installed = set(installer_status.get('installed_items', []))
                 
@@ -272,6 +281,12 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             installed_global = set(installer_status.get('global_hooks', []))
             installed_local = set(installer_status.get('local_hooks', []))
             return tool_name in (installed_global | installed_local)
+        elif installer_name == 'agents':
+            installed = set(installer_status.get('installed_agents', []))
+            return tool_name in installed
+        elif installer_name == 'mcp_servers':
+            installed = set(installer_status.get('installed_servers', {}).keys())
+            return tool_name in installed
         else:
             installed = set(installer_status.get('installed_items', []))
             return tool_name in installed
@@ -295,6 +310,10 @@ class RecommendedToolsInstaller(InteractiveInstaller):
             return installer.install_command(tool_name)
         elif installer_name == 'code_standards':
             return installer.install_language(tool_name)
+        elif installer_name == 'agents':
+            return installer.install_agent(tool_name)
+        elif installer_name == 'mcp_servers':
+            return installer.install_server(tool_name)
         else:
             return None
     
@@ -583,6 +602,26 @@ class RecommendedToolsInstaller(InteractiveInstaller):
                             elif installer_name == 'code_standards':
                                 print(f"  🗑️  Removing {tool_name} (code standard)...")
                                 result = installer.uninstall_language(tool_name)
+                                if result.success:
+                                    if installer_name not in results['uninstalled']:
+                                        results['uninstalled'][installer_name] = []
+                                    results['uninstalled'][installer_name].append(tool_name)
+                                    print(f"     ✅ Removed {tool_name}")
+                                else:
+                                    print(f"     ❌ Failed to remove {tool_name}: {result.message}")
+                            elif installer_name == 'agents':
+                                print(f"  🗑️  Removing {tool_name} (agent)...")
+                                result = installer.uninstall_agent(tool_name)
+                                if result.success:
+                                    if installer_name not in results['uninstalled']:
+                                        results['uninstalled'][installer_name] = []
+                                    results['uninstalled'][installer_name].append(tool_name)
+                                    print(f"     ✅ Removed {tool_name}")
+                                else:
+                                    print(f"     ❌ Failed to remove {tool_name}: {result.message}")
+                            elif installer_name == 'mcp_servers':
+                                print(f"  🗑️  Removing {tool_name} (MCP server)...")
+                                result = installer.uninstall_server(tool_name)
                                 if result.success:
                                     if installer_name not in results['uninstalled']:
                                         results['uninstalled'][installer_name] = []

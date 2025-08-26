@@ -16,6 +16,7 @@ from .config.settings import ORG_NAME, ORG_DISPLAY_NAME, VERSION
 from .installers.commands import CommandsInstaller
 from .installers.code_standards import CodeStandardsInstaller
 from .installers.hooks import HooksInstaller
+from .installers.agents import AgentsInstaller
 from .installers.scripts import ScriptsInstaller
 from .installers.mcp_servers import MCPServersInstaller
 from .installers.recommended import RecommendedToolsInstaller
@@ -105,6 +106,7 @@ def get_installers() -> Dict[str, Any]:
         'commands': CommandsInstaller(),
         'code-standards': CodeStandardsInstaller(), 
         'hooks': HooksInstaller(),
+        'agents': AgentsInstaller(),
         'scripts': ScriptsInstaller(),
         'mcp-servers': MCPServersInstaller(),
         'uninstall': UninstallAllInstaller()
@@ -184,7 +186,7 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict[str, A
             current_section = 'quick'
             print(f"{Colors.BOLD}Quick Setup{Colors.NC}")
             print(f"{Colors.DIM}One-click configuration for the team{Colors.NC}")
-        elif name in ['commands', 'code-standards', 'hooks', 'scripts'] and current_section != 'tools':
+        elif name in ['commands', 'code-standards', 'hooks', 'agents', 'scripts'] and current_section != 'tools':
             current_section = 'tools'
             print(f"\n{Colors.BOLD}Tools{Colors.NC}")
             print(f"{Colors.DIM}Individual component management{Colors.NC}")
@@ -227,6 +229,11 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict[str, A
                             global_count = len(details['global_hooks'])
                             local_count = len(details['local_hooks'])
                             print(f"{Colors.DIM}     Hooks: {Colors.NC}{global_count} global, {local_count} local")
+                    elif name == 'agents':
+                        status = details.get('status', {})
+                        installed_agents = status.get('installed_agents', [])
+                        available_agents = status.get('available_agents', [])
+                        print(f"{Colors.DIM}     Agents: {Colors.NC}{len(installed_agents)} installed, {len(available_agents)} available")
                     elif name == 'scripts' and 'available_scripts' in details:
                         count = len(details['available_scripts'])
                         print(f"{Colors.DIM}     Scripts: {Colors.NC}{count} available")
@@ -264,7 +271,7 @@ def run_interactive() -> None:
     
     installers = get_installers()
     # Order the menu items properly: recommended, tools, then uninstall
-    installer_names = ['recommended', 'commands', 'code-standards', 'hooks', 'scripts', 'mcp-servers', 'uninstall']
+    installer_names = ['recommended', 'commands', 'code-standards', 'hooks', 'agents', 'scripts', 'mcp-servers', 'uninstall']
     
     selected = 0
     show_details = False
@@ -428,6 +435,8 @@ def run_component_menu(component_name: str, installer: Any) -> None:
             run_commands_menu(installer)
         elif component_name == 'code-standards':
             run_code_standards_menu(installer)
+        elif component_name == 'agents':
+            run_agents_menu(installer)
         elif component_name == 'scripts':
             run_scripts_menu(installer)
         elif component_name == 'mcp-servers':
@@ -943,6 +952,162 @@ def draw_code_standards_menu(languages: List[str], selected: int, installer: Any
         print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_language}' standards{Colors.NC}")
     else:
         print(f"{Colors.GREEN}Press Enter/→ to install '{selected_language}' standards{Colors.NC}")
+    
+    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
+
+def run_agents_menu(installer: Any) -> None:
+    """Run agents component submenu with individual agent management"""
+    global terminal_resized
+    
+    # Get available agents from the installer
+    available_agents = installer.list_available_agents()
+    
+    if not available_agents:
+        clear_screen()
+        print(f"\n{Colors.YELLOW}No agents available{Colors.NC}")
+        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+        getch()
+        return
+    
+    selected = 0
+    show_details = False
+    force_redraw = True
+    
+    try:
+        clear_screen()
+        while True:
+            if terminal_resized:
+                terminal_resized = False
+                force_redraw = True
+                clear_screen()
+            
+            if force_redraw:
+                draw_agents_menu(available_agents, selected, installer, show_details)
+                force_redraw = False
+            
+            key = getch(timeout=0.1)
+            
+            if key is None:
+                if terminal_resized:
+                    continue
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
+                print(Colors.SHOW_CURSOR)
+                return
+            elif key == 'UP' and selected > 0:
+                selected -= 1
+                show_details = False
+                force_redraw = True
+            elif key == 'DOWN' and selected < len(available_agents) - 1:
+                selected += 1
+                show_details = False
+                force_redraw = True
+            elif key == 'd':
+                show_details = not show_details
+                force_redraw = True
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
+                selected_agent = available_agents[selected]
+                
+                # Toggle installation for selected agent
+                status = installer.check_status()
+                installed_agents = status.get('installed_agents', [])
+                
+                if selected_agent in installed_agents:
+                    # Uninstall agent
+                    result = installer.uninstall_agent(selected_agent)
+                else:
+                    # Install agent
+                    result = installer.install_agent(selected_agent)
+                
+                # Show result briefly
+                if result:
+                    show_operation_result(result, selected_agent, "install" if selected_agent not in installed_agents else "uninstall")
+                
+                force_redraw = True
+            elif key == 'a':  # Install all
+                results = []
+                status = installer.check_status()
+                installed_agents = status.get('installed_agents', [])
+                for agent in available_agents:
+                    if agent not in installed_agents:
+                        result = installer.install_agent(agent)
+                        results.append((agent, result))
+                show_bulk_operation_results(results, "install")
+                force_redraw = True
+            elif key == 'r':  # Remove all
+                results = []
+                status = installer.check_status()
+                installed_agents = status.get('installed_agents', [])
+                for agent in installed_agents:
+                    result = installer.uninstall_agent(agent)
+                    results.append((agent, result))
+                show_bulk_operation_results(results, "uninstall")
+                force_redraw = True
+            
+    except KeyboardInterrupt:
+        print(Colors.SHOW_CURSOR)
+        return
+    except Exception as e:
+        print(f"\n{Colors.RED}Error in agents menu: {e}{Colors.NC}")
+        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+        getch()
+    finally:
+        print(Colors.SHOW_CURSOR)
+
+def draw_agents_menu(agents: List[str], selected: int, installer: Any, show_details: bool = False) -> None:
+    """Draw the agents submenu"""
+    # Get current installation status
+    status = installer.check_status()
+    installed_agents = status.get('installed_agents', [])
+    
+    # Calculate maximum agent name length for alignment
+    max_agent_length = max(len(agent) for agent in agents) if agents else 30
+    max_agent_length = max(max_agent_length, 35)  # Ensure minimum width
+    
+    def get_item_status(agent: str) -> str:
+        is_installed = agent in installed_agents
+        if is_installed:
+            return f"{Colors.GREEN}[INSTALLED]{Colors.NC}"
+        else:
+            return f"{Colors.GRAY}[NOT INSTALLED]{Colors.NC}"
+    
+    def get_item_display(agent: str, is_selected: bool) -> str:
+        is_installed = agent in installed_agents
+        prefix = f"{Colors.GREEN}✓{Colors.NC} " if is_installed else "  "
+        
+        if is_selected:
+            return f"{prefix}{Colors.REVERSE}{agent:<{max_agent_length}}{Colors.NC}"
+        else:
+            if is_installed:
+                return f"{prefix}{agent:<{max_agent_length}}"
+            else:
+                return f"{prefix}{Colors.DIM}{agent:<{max_agent_length}}{Colors.NC}"
+    
+    def show_agent_details(agent: str, is_installed: bool) -> None:
+        print(f"\n{Colors.DIM}     Specialized AI assistant for Claude Code{Colors.NC}")
+    
+    # Draw menu using base function
+    draw_base_menu(
+        "🤖 Claude Agents",
+        agents,
+        selected,
+        get_item_status,
+        get_item_display,
+        header_info={
+            f"Total Agents": f"{len(agents)}",
+            f"Installed": f"{len(installed_agents)}"
+        },
+        show_details=show_details,
+        detail_func=lambda agent, _: show_agent_details(agent, agent in installed_agents)
+    )
+    
+    # Show action hint at bottom
+    selected_agent = agents[selected]
+    is_installed = selected_agent in installed_agents
+    
+    if is_installed:
+        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_agent}'{Colors.NC}")
+    else:
+        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_agent}'{Colors.NC}")
     
     print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
 
