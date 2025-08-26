@@ -17,6 +17,7 @@ from .installers.commands import CommandsInstaller
 from .installers.code_standards import CodeStandardsInstaller
 from .installers.hooks import HooksInstaller
 from .installers.scripts import ScriptsInstaller
+from .installers.mcp_servers import MCPServersInstaller
 from .installers.recommended import RecommendedToolsInstaller
 from .installers.uninstall_all import UninstallAllInstaller
 
@@ -105,6 +106,7 @@ def get_installers() -> Dict[str, Any]:
         'code-standards': CodeStandardsInstaller(), 
         'hooks': HooksInstaller(),
         'scripts': ScriptsInstaller(),
+        'mcp-servers': MCPServersInstaller(),
         'uninstall': UninstallAllInstaller()
     }
 
@@ -262,7 +264,7 @@ def run_interactive() -> None:
     
     installers = get_installers()
     # Order the menu items properly: recommended, tools, then uninstall
-    installer_names = ['recommended', 'commands', 'code-standards', 'hooks', 'scripts', 'uninstall']
+    installer_names = ['recommended', 'commands', 'code-standards', 'hooks', 'scripts', 'mcp-servers', 'uninstall']
     
     selected = 0
     show_details = False
@@ -428,6 +430,8 @@ def run_component_menu(component_name: str, installer: Any) -> None:
             run_code_standards_menu(installer)
         elif component_name == 'scripts':
             run_scripts_menu(installer)
+        elif component_name == 'mcp-servers':
+            run_mcp_servers_menu(installer)
         elif component_name == 'recommended':
             run_recommended_menu(installer)
         elif component_name == 'uninstall':
@@ -972,6 +976,61 @@ def run_scripts_menu(installer: Any) -> None:
         else:
             result = installer.install()
         # Action is instant, return immediately
+
+
+def run_mcp_servers_menu(installer: Any) -> None:
+    """Run MCP servers component submenu"""
+    # Get available servers from the installer
+    available_servers = list(installer.available_servers.keys())
+    
+    if not available_servers:
+        clear_screen()
+        print(f"\n{Colors.YELLOW}No MCP servers available{Colors.NC}")
+        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+        getch()
+        return
+    
+    # For now, we'll just handle the single server case
+    for server_name in available_servers:
+        server_info = installer.available_servers[server_name]
+        
+        clear_screen()
+        print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 MCP Servers{Colors.NC}")
+        print(f"Available Server: {server_name}\n")
+        
+        print(f"Description: {server_info.get('description', 'No description')}")
+        print(f"Version: {server_info.get('version', 'Unknown')}")
+        
+        # Check if installed
+        status = installer.check_status()
+        installed_servers = status.get('installed_servers', {})
+        
+        if server_name in installed_servers:
+            print(f"\n{Colors.GREEN}✓ {server_name} is installed{Colors.NC}")
+            print(f"\n{Colors.YELLOW}Press Enter/→ to uninstall{Colors.NC}")
+        else:
+            print(f"\n{Colors.GRAY}✗ {server_name} is not installed{Colors.NC}")
+            print(f"\n{Colors.GREEN}Press Enter/→ to install{Colors.NC}")
+        
+        print(f"{Colors.DIM}Press q or ← to go back{Colors.NC}")
+        
+        key = getch()
+        if key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
+            if server_name in installed_servers:
+                result = installer.uninstall_server(server_name)
+            else:
+                # Install server (will prompt for configuration)
+                result = installer.install_server(server_name)
+            
+            # Show result
+            if result:
+                clear_screen()
+                if result.success:
+                    print(f"\n{Colors.GREEN}✓ {result.message}{Colors.NC}")
+                else:
+                    print(f"\n{Colors.RED}✗ {result.message}{Colors.NC}")
+                print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+                getch()
 
 
 def run_uninstall_menu(installer: Any) -> None:

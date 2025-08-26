@@ -1,0 +1,34 @@
+{
+  "name": "@ethpandaops/ethpandaops-data",
+  "version": "0.2.0",
+  "description": "MCP server for interacting with ethpandaops internal data",
+  "main": "index.js",
+  "type": "module",
+  "bin": {
+    "ethpandaops-data": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "axios": "^1.7.9"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ethpandaops/ai-cookbook.git",
+    "directory": "tools/mcp-servers/ethpandaops-data"
+  },
+  "keywords": [
+    "mcp",
+    "ethpandaops",
+    "data",
+    "grafana"
+  ],
+  "author": "ethpandaops",
+  "license": "MIT"
+}
