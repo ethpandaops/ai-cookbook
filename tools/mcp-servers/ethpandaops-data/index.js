@@ -249,14 +249,10 @@ const toolHandlers = {
     const sqlLower = sql.toLowerCase();
     for (const pattern of dangerousPatterns) {
       if (sqlLower.includes(pattern)) {
-        throw new Error(`SQL query contains potentially dangerous pattern: ${pattern}. Only SELECT queries are allowed.`);
+        throw new Error(`SQL query contains potentially dangerous pattern: ${pattern}.`);
       }
     }
-    
-    // Ensure it's a SELECT query
-    if (!sqlLower.trim().startsWith('select') && !sqlLower.trim().startsWith('with')) {
-      throw new Error('Only SELECT and WITH queries are allowed for safety reasons.');
-    }
+
     const fromMs = Math.floor(parseTime(from) / 1e6);
     const toMs = Math.floor(parseTime(to) / 1e6);
     const ds = enabledDatasources[datasourceUid];
