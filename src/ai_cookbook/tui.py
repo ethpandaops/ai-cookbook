@@ -1031,7 +1031,7 @@ def run_agents_menu(installer: Any) -> None:
                     if agent not in installed_agents:
                         result = installer.install_agent(agent)
                         results.append((agent, result))
-                show_bulk_operation_results(results, "install")
+                show_batch_results(results, "install")
                 force_redraw = True
             elif key == 'r':  # Remove all
                 results = []
@@ -1040,7 +1040,7 @@ def run_agents_menu(installer: Any) -> None:
                 for agent in installed_agents:
                     result = installer.uninstall_agent(agent)
                     results.append((agent, result))
-                show_bulk_operation_results(results, "uninstall")
+                show_batch_results(results, "uninstall")
                 force_redraw = True
             
     except KeyboardInterrupt:

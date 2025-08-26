@@ -132,6 +132,7 @@ class AgentsInstaller(BaseInstaller):
                     False,
                     f"Dependencies not met for agent '{agent_name}'\n{deps_result.get('output', '')}",
                     deps_result
+                )
             
             # Create required directories
             self.create_required_directories()
@@ -195,12 +196,6 @@ class AgentsInstaller(BaseInstaller):
                     f"Agent '{agent_name}' is not installed"
                 )
             
-            # Back up before removal
-            backup_path = self.backup_manager.create_backup(
-                agent_target_dir,
-                f"agent_{agent_name}_uninstall"
-            )
-            
             # Remove agent directory
             shutil.rmtree(agent_target_dir)
             
@@ -209,8 +204,7 @@ class AgentsInstaller(BaseInstaller):
                 self.update_detector.remove_metadata(agent_name)
             
             details = {
-                'agent': agent_name,
-                'backup_created': str(backup_path) if backup_path else None
+                'agent': agent_name
             }
             
             return InstallationResult(
@@ -248,18 +242,11 @@ class AgentsInstaller(BaseInstaller):
                     "No Claude agents were installed"
                 )
             
-            # Create backup before removal
-            backup_path = self.backup_manager.create_backup(
-                CLAUDE_AGENTS_DIR,
-                "claude_agents_uninstall"
-            )
-            
             # Remove agents directory
             remove_directory(CLAUDE_AGENTS_DIR)
             
             details = {
-                'removed': installed_agents,
-                'backup_created': str(backup_path) if backup_path else None
+                'removed': installed_agents
             }
             
             return InstallationResult(
