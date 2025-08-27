@@ -9,7 +9,9 @@ from ..installers.base import InteractiveInstaller, InstallationResult
 from ..installers.commands import CommandsInstaller
 from ..installers.code_standards import CodeStandardsInstaller
 from ..installers.hooks import HooksInstaller
+from ..installers.agents import AgentsInstaller
 from ..installers.scripts import ScriptsInstaller
+from ..installers.mcp_servers import MCPServersInstaller
 from ..utils.file_operations import file_exists, directory_exists
 from ..config.settings import CLAUDE_DIR, ORG_NAME, ORG_DISPLAY_NAME
 from ..project_registry import ProjectRegistry
@@ -22,6 +24,8 @@ class UninstallAllInstaller(InteractiveInstaller):
     - All code standards and CLAUDE.md entries
     - All commands from ~/.claude/commands/{ORG_NAME}
     - All hooks from ~/.claude/hooks/{ORG_NAME}
+    - All agents from ~/.claude/agents/{ORG_NAME}
+    - All MCP servers from ~/.claude.json
     - All local project hooks and settings
     - Scripts from PATH
     - Project registry entries
@@ -37,6 +41,8 @@ class UninstallAllInstaller(InteractiveInstaller):
             'commands': CommandsInstaller(),
             'code_standards': CodeStandardsInstaller(),
             'hooks': HooksInstaller(),
+            'agents': AgentsInstaller(),
+            'mcp_servers': MCPServersInstaller(),
             'scripts': ScriptsInstaller()
         }
         self.project_registry = ProjectRegistry()
@@ -70,6 +76,16 @@ class UninstallAllInstaller(InteractiveInstaller):
                 if installer_status.get('installed', False):
                     status['components_installed'][name] = ['scripts in PATH']
                     status['total_items'] += 1
+            elif name == 'agents':
+                installed = installer_status.get('installed_agents', [])
+                if installed:
+                    status['components_installed'][name] = installed
+                    status['total_items'] += len(installed)
+            elif name == 'mcp_servers':
+                installed = list(installer_status.get('installed_servers', {}).keys())
+                if installed:
+                    status['components_installed'][name] = installed
+                    status['total_items'] += len(installed)
             else:
                 installed = installer_status.get('installed_items', [])
                 if installed:
@@ -124,6 +140,8 @@ class UninstallAllInstaller(InteractiveInstaller):
             self._uninstall_code_standards(results)
             self._uninstall_commands(results)
             self._uninstall_hooks(results)
+            self._uninstall_agents(results)
+            self._uninstall_mcp_servers(results)
             self._clean_local_projects(results)
             self._uninstall_scripts(results)
             self._remove_ai_cookbook_binary(results)
@@ -281,6 +299,43 @@ class UninstallAllInstaller(InteractiveInstaller):
                 results['uninstalled']['hooks'].append(f"{hook} (local)")
             else:
                 results['errors'].append(f"Failed to remove {hook} (local): {result.message}")
+    
+    def _uninstall_agents(self, results: Dict[str, Any]) -> None:
+        """Uninstall all agents.
+        
+        Args:
+            results: Results dictionary to update
+        """
+        print("\n🤖 Removing agents...")
+        agents_installer = self.installers['agents']
+        agents_status = agents_installer.check_status()
+        
+        for agent in agents_status.get('installed_agents', []):
+            print(f"  • Removing {agent}...")
+            result = agents_installer.uninstall_agent(agent)
+            if result.success:
+                if 'agents' not in results['uninstalled']:
+                    results['uninstalled']['agents'] = []
+                results['uninstalled']['agents'].append(agent)
+            else:
+                results['errors'].append(f"Failed to remove {agent}: {result.message}")
+    
+    def _uninstall_mcp_servers(self, results: Dict[str, Any]) -> None:
+        """Uninstall all MCP servers.
+        
+        Args:
+            results: Results dictionary to update
+        """
+        print("\n🔌 Removing MCP servers...")
+        mcp_installer = self.installers['mcp_servers']
+        result = mcp_installer.uninstall()
+        if result.success:
+            if result.details and 'removed' in result.details:
+                if 'mcp_servers' not in results['uninstalled']:
+                    results['uninstalled']['mcp_servers'] = []
+                results['uninstalled']['mcp_servers'].extend(result.details['removed'])
+        else:
+            results['errors'].append(f"Failed to remove MCP servers: {result.message}")
     
     def _clean_local_projects(self, results: Dict[str, Any]) -> None:
         """Clean up local project hooks and registry entries.

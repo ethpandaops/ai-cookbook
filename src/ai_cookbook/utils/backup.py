@@ -19,17 +19,17 @@ class BackupManager:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         
     def create_backup(self, file_path: Path, prefix: str = "backup") -> Path:
-        """Create timestamped backup of file.
+        """Create timestamped backup of file or directory.
         
         Args:
-            file_path: Path to file to backup
+            file_path: Path to file or directory to backup
             prefix: Prefix for backup filename
             
         Returns:
-            Path to created backup file
+            Path to created backup file or directory
             
         Raises:
-            FileNotFoundError: If source file doesn't exist
+            FileNotFoundError: If source file or directory doesn't exist
             PermissionError: If unable to read source or write backup
         """
         if not file_path.exists():
@@ -43,8 +43,13 @@ class BackupManager:
         backup_path = self.backup_dir / backup_name
         
         try:
-            # Copy file to backup location
-            shutil.copy2(file_path, backup_path)
+            # Copy file or directory to backup location
+            if file_path.is_dir():
+                # For directories, use copytree
+                shutil.copytree(file_path, backup_path)
+            else:
+                # For files, use copy2
+                shutil.copy2(file_path, backup_path)
             return backup_path
         except PermissionError as e:
             raise PermissionError(f"Unable to create backup: {e}")
@@ -70,7 +75,14 @@ class BackupManager:
             target_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Copy backup to target location
-            shutil.copy2(backup_path, target_path)
+            if backup_path.is_dir():
+                # For directories, remove existing target and use copytree
+                if target_path.exists():
+                    shutil.rmtree(target_path)
+                shutil.copytree(backup_path, target_path)
+            else:
+                # For files, use copy2
+                shutil.copy2(backup_path, target_path)
             return True
         except Exception:
             return False

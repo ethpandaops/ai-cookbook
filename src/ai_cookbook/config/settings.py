@@ -18,12 +18,14 @@ CLAUDE_DIR = Path.home() / ".claude"
 CLAUDE_COMMANDS_DIR = CLAUDE_DIR / "commands" / ORG_NAME
 CLAUDE_STANDARDS_DIR = CLAUDE_DIR / ORG_NAME / "code-standards"
 CLAUDE_HOOKS_DIR = CLAUDE_DIR / "hooks" / ORG_NAME
+CLAUDE_AGENTS_DIR = CLAUDE_DIR / "agents" / ORG_NAME
 
 # Source paths (relative to repo root)
 REPO_ROOT = Path(__file__).parent.parent.parent.parent
 COMMANDS_SOURCE = REPO_ROOT / "claude-code" / "commands"
 STANDARDS_SOURCE = REPO_ROOT / "claude-code" / "code-standards"
 HOOKS_SOURCE = REPO_ROOT / "claude-code" / "hooks"
+AGENTS_SOURCE = REPO_ROOT / "claude-code" / "agents"
 SCRIPTS_SOURCE = REPO_ROOT / "scripts"
 
 # UI configuration
@@ -45,6 +47,7 @@ MAIN_MENU_ITEMS = [
     "Claude Commands",
     "Code Standards", 
     "Hooks",
+    "Claude Agents",
     "Scripts"
 ]
 
