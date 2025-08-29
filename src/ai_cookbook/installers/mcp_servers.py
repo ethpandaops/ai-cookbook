@@ -328,15 +328,27 @@ class MCPServersInstaller(InteractiveInstaller):
                     except Exception as e:
                         print(f"⚠️  Could not load datasource descriptions: {e}")
                     
-            # First install npm dependencies if needed
-            if not (implementation_path / "node_modules").exists():
-                print(f"\n📦 Installing dependencies for {implementation_path.name}...")
-                result = run_command(['npm', 'install'], cwd=str(implementation_path))
-                if result.returncode != 0:
-                    return InstallationResult(
-                        False,
-                        f"Failed to install npm dependencies: {result.stderr}"
-                    )
+            # Handle binary runtime servers
+            if server_config_data.get('runtime') == 'binary':
+                build_cmd = server_config_data.get('build_command')
+                if build_cmd:
+                    print(f"\n🔨 Building {server_name}...")
+                    result = run_command(build_cmd.split(), cwd=str(implementation_path))
+                    if result.returncode != 0:
+                        return InstallationResult(
+                            False,
+                            f"Failed to build {server_name}: {result.stderr}"
+                        )
+            else:
+                # First install npm dependencies if needed
+                if not (implementation_path / "node_modules").exists():
+                    print(f"\n📦 Installing dependencies for {implementation_path.name}...")
+                    result = run_command(['npm', 'install'], cwd=str(implementation_path))
+                    if result.returncode != 0:
+                        return InstallationResult(
+                            False,
+                            f"Failed to install npm dependencies: {result.stderr}"
+                        )
                     
             # Test the configuration if it's a Grafana-based server
             if 'grafana_url' in env_vars and 'service_token' in env_vars:
@@ -382,11 +394,19 @@ http.get('/api/user').then(r => {
                     print("⚠️  Could not test authentication, but continuing...")
                 
             # Create the server configuration for Claude Code
-            server_config = {
-                'command': 'node',
-                'args': [str(implementation_path / entry_point)],
-                'env': {}
-            }
+            if server_config_data.get('runtime') == 'binary':
+                # Use args format for consistency with Claude's expectations
+                server_config = {
+                    'command': str(implementation_path / entry_point),
+                    'args': [],
+                    'env': {}
+                }
+            else:
+                server_config = {
+                    'command': 'node',
+                    'args': [str(implementation_path / entry_point)],
+                    'env': {}
+                }
             
             # Map config values to environment variables
             for key, value in env_vars.items():
