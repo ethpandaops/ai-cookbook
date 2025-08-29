@@ -1,0 +1,29 @@
+# Build artifacts
+bin/
+*.exe
+
+# Test coverage
+coverage.out
+*.test
+
+# Temporary files
+*.tmp
+*.log
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Cloned consensus-specs repository
+.consensus-specs/

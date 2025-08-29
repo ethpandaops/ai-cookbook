@@ -1155,8 +1155,9 @@ def run_mcp_servers_menu(installer: Any) -> None:
         getch()
         return
     
-    # For now, we'll just handle the single server case
-    for server_name in available_servers:
+    # If only one server, show it directly
+    if len(available_servers) == 1:
+        server_name = available_servers[0]
         server_info = installer.available_servers[server_name]
         
         clear_screen()
@@ -1196,6 +1197,93 @@ def run_mcp_servers_menu(installer: Any) -> None:
                     print(f"\n{Colors.RED}✗ {result.message}{Colors.NC}")
                 print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
                 getch()
+        return
+    
+    # Multiple servers - show selection menu
+    selected_index = 0
+    while True:
+        clear_screen()
+        print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 MCP Servers{Colors.NC}")
+        print(f"{Colors.DIM}Select a server to manage:{Colors.NC}\n")
+        
+        # Check installation status
+        status = installer.check_status()
+        installed_servers = status.get('installed_servers', {})
+        
+        # Display server list
+        for i, server_name in enumerate(available_servers):
+            server_info = installer.available_servers[server_name]
+            is_installed = server_name in installed_servers
+            
+            # Highlight selected item
+            if i == selected_index:
+                prefix = f"{Colors.CYAN}→ {Colors.NC}"
+            else:
+                prefix = "  "
+            
+            # Show installation status
+            if is_installed:
+                status_icon = f"{Colors.GREEN}✓{Colors.NC}"
+            else:
+                status_icon = f"{Colors.GRAY}✗{Colors.NC}"
+            
+            # Truncate description if too long
+            desc = server_info.get('description', 'No description')
+            if len(desc) > 60:
+                desc = desc[:57] + "..."
+            
+            print(f"{prefix}{status_icon} {server_name}")
+            print(f"     {Colors.DIM}{desc}{Colors.NC}")
+        
+        print(f"\n{Colors.YELLOW}Navigation:{Colors.NC}")
+        print(f"  ↑/↓ or j/k: Navigate")
+        print(f"  Enter/→: Select server")
+        print(f"  q/← : Back to main menu")
+        
+        key = getch()
+        
+        # Navigation
+        if key == 'UP' or key == 'k':
+            selected_index = (selected_index - 1) % len(available_servers)
+        elif key == 'DOWN' or key == 'j':
+            selected_index = (selected_index + 1) % len(available_servers)
+        elif key == '\r' or key == '\n' or key == 'RIGHT':
+            # Select server and show install/uninstall menu
+            server_name = available_servers[selected_index]
+            server_info = installer.available_servers[server_name]
+            
+            clear_screen()
+            print(f"\n{Colors.BOLD}{Colors.CYAN}🐼 MCP Server: {server_name}{Colors.NC}\n")
+            print(f"Description: {server_info.get('description', 'No description')}")
+            print(f"Version: {server_info.get('config', {}).get('version', 'Unknown')}\n")
+            
+            if server_name in installed_servers:
+                print(f"{Colors.GREEN}✓ This server is installed{Colors.NC}")
+                print(f"\n{Colors.YELLOW}Press Enter to uninstall{Colors.NC}")
+            else:
+                print(f"{Colors.GRAY}✗ This server is not installed{Colors.NC}")
+                print(f"\n{Colors.GREEN}Press Enter to install{Colors.NC}")
+            
+            print(f"{Colors.DIM}Press q or ← to go back{Colors.NC}")
+            
+            action_key = getch()
+            if action_key == '\r' or action_key == '\n':
+                if server_name in installed_servers:
+                    result = installer.uninstall_server(server_name)
+                else:
+                    result = installer.install_server(server_name)
+                
+                # Show result
+                if result:
+                    clear_screen()
+                    if result.success:
+                        print(f"\n{Colors.GREEN}✓ {result.message}{Colors.NC}")
+                    else:
+                        print(f"\n{Colors.RED}✗ {result.message}{Colors.NC}")
+                    print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+                    getch()
+        elif key == 'q' or key == 'LEFT' or key == '\x1b':
+            break
 
 
 def run_uninstall_menu(installer: Any) -> None:
