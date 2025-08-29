@@ -36,26 +36,30 @@ type SpecsManager struct {
 // NewSpecsManager creates a new instance of the specs manager.
 // The repository will be cloned locally to keep everything self-contained.
 func NewSpecsManager(log logrus.FieldLogger, branch string) *SpecsManager {
-	// Get the directory where the binary is located
+	// Get the actual binary path (resolving any symlinks)
 	execPath, err := os.Executable()
 	if err != nil {
-		// Fallback to current directory if we can't get executable path
-		execPath = "."
+		log.WithError(err).Fatal("Failed to get executable path")
 	}
 
-	// Store the consensus-specs repo in the same directory as the MCP server
-	// This keeps everything self-contained and doesn't pollute the user's home directory
-	baseDir := filepath.Dir(execPath)
-
-	// If we're in a bin directory, go up one level to the project root
-	if filepath.Base(baseDir) == "bin" {
-		baseDir = filepath.Dir(baseDir)
+	// Resolve symlinks to get the real path
+	realPath, err := filepath.EvalSymlinks(execPath)
+	if err != nil {
+		realPath = execPath
 	}
+
+	// The binary is at: .../ethereum-specs/bin/ethereum-specs-mcp
+	// We want the repo at: .../ethereum-specs/.consensus-specs
+	// So go up two levels from the binary and then into ethereum-specs
+	baseDir := filepath.Dir(filepath.Dir(realPath))
+
+	repoPath := filepath.Join(baseDir, ".consensus-specs")
+	log.WithField("repo_path", repoPath).Info("Using repository path")
 
 	return &SpecsManager{
 		log:      log.WithField("component", "specs_manager"),
 		branch:   branch,
-		repoPath: filepath.Join(baseDir, ".consensus-specs"),
+		repoPath: repoPath,
 		cache:    make(map[string]string, 100), // Pre-allocate for ~100 cached specs
 	}
 }
