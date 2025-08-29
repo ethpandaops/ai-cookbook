@@ -4,6 +4,8 @@
 
 The `analyze-network` command provides comprehensive analysis of Ethereum network nodes across different testnets and analysis scopes.
 
+DO NOT HALLUCINATE ANY INFORMATION. DO NOT TRY TO PROVIDE ANY MITIGATION IDEAS, JUST FOCUS ON PRESENTING THE INFORMATION EFFICIENTLY SO THAT THE USE CAN MAKE THE DECISION. When in doubt, present data as tables.
+
 ### Usage
 
 ```
