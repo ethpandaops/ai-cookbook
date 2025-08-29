@@ -1,3 +1,5 @@
+// Package main contains the specs repository management and tool implementations
+// for the Ethereum Consensus Specs MCP server.
 package main
 
 import (
@@ -16,36 +18,62 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// availableForks defines all Ethereum consensus fork names in chronological order.
+// These correspond to directories in the ethereum/consensus-specs repository.
 var availableForks = []string{"phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"}
 
+// SpecsManager handles all interactions with the Ethereum consensus specifications repository.
+// It manages git operations, caching, and provides methods to query specification content.
 type SpecsManager struct {
 	log         logrus.FieldLogger
-	branch      string
-	repoPath    string
-	cache       map[string]string
-	cacheMutex  sync.RWMutex
-	initialized bool
+	branch      string            // Git branch to track (e.g., "master", "dev")
+	repoPath    string            // Local path to the cloned repository
+	cache       map[string]string // In-memory cache of spec content to reduce disk I/O
+	cacheMutex  sync.RWMutex      // Protects concurrent access to the cache
+	initialized bool              // Tracks whether initialization has completed
 }
 
+// NewSpecsManager creates a new instance of the specs manager.
+// The repository will be cloned locally to keep everything self-contained.
 func NewSpecsManager(log logrus.FieldLogger, branch string) *SpecsManager {
-	homeDir, _ := os.UserHomeDir()
+	// Get the directory where the binary is located
+	execPath, err := os.Executable()
+	if err != nil {
+		// Fallback to current directory if we can't get executable path
+		execPath = "."
+	}
+
+	// Store the consensus-specs repo in the same directory as the MCP server
+	// This keeps everything self-contained and doesn't pollute the user's home directory
+	baseDir := filepath.Dir(execPath)
+
+	// If we're in a bin directory, go up one level to the project root
+	if filepath.Base(baseDir) == "bin" {
+		baseDir = filepath.Dir(baseDir)
+	}
+
 	return &SpecsManager{
 		log:      log.WithField("component", "specs_manager"),
 		branch:   branch,
-		repoPath: filepath.Join(homeDir, ".ethereum-specs"),
-		cache:    make(map[string]string, 100),
+		repoPath: filepath.Join(baseDir, ".consensus-specs"),
+		cache:    make(map[string]string, 100), // Pre-allocate for ~100 cached specs
 	}
 }
 
+// Initialize is a convenience wrapper that always enables auto-update.
+// Deprecated: Use InitializeWithAutoUpdate directly for better control.
 func (sm *SpecsManager) Initialize(ctx context.Context) error {
 	return sm.InitializeWithAutoUpdate(ctx, true)
 }
 
+// InitializeWithAutoUpdate prepares the specs repository for use.
+// If the repository doesn't exist, it will be cloned synchronously.
+// If it exists and autoUpdate is true, updates will run in the background.
 func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate bool) error {
 	sm.log.Info("Initializing specs repository")
 
 	if _, err := os.Stat(sm.repoPath); os.IsNotExist(err) {
-		// Repository doesn't exist - must clone synchronously
+		// First-time setup: must complete clone before server can start
 		sm.log.Info("Cloning ethereum/consensus-specs repository")
 		cmd := exec.CommandContext(ctx, "git", "clone",
 			"--branch", sm.branch,
@@ -57,16 +85,17 @@ func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate
 		}
 		sm.log.Info("Repository cloned successfully")
 	} else if autoUpdate {
-		// Repository exists and auto-update is enabled - update in background
+		// Repository exists: update in background to avoid blocking server startup
 		sm.log.Info("Repository exists, starting background update")
 
-		// Start update in a goroutine so we don't block initialization
+		// Launch update in goroutine for non-blocking operation
 		go func() {
 			sm.log.Info("Starting background repository update")
 
-			// Use a new context that won't be cancelled when the request completes
+			// Create independent context to survive parent cancellation
 			updateCtx := context.Background()
 
+			// Fetch latest changes from remote
 			cmd := exec.CommandContext(updateCtx, "git", "fetch", "origin")
 			cmd.Dir = sm.repoPath
 			if output, err := cmd.CombinedOutput(); err != nil {
@@ -74,6 +103,7 @@ func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate
 				return
 			}
 
+			// Ensure we're on the correct branch
 			cmd = exec.CommandContext(updateCtx, "git", "checkout", sm.branch)
 			cmd.Dir = sm.repoPath
 			if output, err := cmd.CombinedOutput(); err != nil {
@@ -81,6 +111,7 @@ func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate
 				return
 			}
 
+			// Pull latest changes
 			cmd = exec.CommandContext(updateCtx, "git", "pull", "origin", sm.branch)
 			cmd.Dir = sm.repoPath
 			if output, err := cmd.CombinedOutput(); err != nil {
@@ -99,6 +130,8 @@ func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate
 	return nil
 }
 
+// GetSpec retrieves the content of a specific specification document.
+// The content is cached after first access to improve performance.
 func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Fork  string `json:"fork"`
@@ -109,12 +142,15 @@ func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (in
 		return nil, fmt.Errorf("invalid parameters: %w", err)
 	}
 
+	// Validate fork name against known forks
 	if !sm.isValidFork(args.Fork) {
 		return nil, fmt.Errorf("invalid fork: %s", args.Fork)
 	}
 
+	// Build path to the specification file
 	specPath := filepath.Join(sm.repoPath, "specs", args.Fork, args.Topic+".md")
 
+	// Check cache first to avoid repeated disk reads
 	sm.cacheMutex.RLock()
 	if content, ok := sm.cache[specPath]; ok {
 		sm.cacheMutex.RUnlock()
@@ -126,6 +162,7 @@ func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (in
 	}
 	sm.cacheMutex.RUnlock()
 
+	// Read from disk if not cached
 	content, err := os.ReadFile(specPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -136,6 +173,7 @@ func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (in
 
 	contentStr := string(content)
 
+	// Update cache with new content
 	sm.cacheMutex.Lock()
 	sm.cache[specPath] = contentStr
 	sm.cacheMutex.Unlock()
@@ -147,37 +185,45 @@ func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (in
 	}, nil
 }
 
+// SearchSpecs searches for a query string across specification files.
+// It returns matching files with context around the matched lines.
 func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Query string `json:"query"`
-		Fork  string `json:"fork,omitempty"`
+		Fork  string `json:"fork,omitempty"` // Optional: limit to specific fork
 	}
 
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, fmt.Errorf("invalid parameters: %w", err)
 	}
 
+	// Validate fork if specified
 	if args.Fork != "" && !sm.isValidFork(args.Fork) {
 		return nil, fmt.Errorf("invalid fork: %s", args.Fork)
 	}
 
 	results := []map[string]interface{}{}
+
+	// Determine which forks to search
 	searchForks := availableForks
 	if args.Fork != "" {
 		searchForks = []string{args.Fork}
 	}
 
+	// Prepare search patterns for case-insensitive matching
 	queryLower := strings.ToLower(args.Query)
 	re, reErr := regexp.Compile("(?i)" + regexp.QuoteMeta(args.Query))
 
+	// Search through each fork's specifications
 	for _, fork := range searchForks {
 		forkPath := filepath.Join(sm.repoPath, "specs", fork)
 
 		entries, err := os.ReadDir(forkPath)
 		if err != nil {
-			continue
+			continue // Skip if fork directory doesn't exist
 		}
 
+		// Check each markdown file in the fork
 		for _, entry := range entries {
 			if !strings.HasSuffix(entry.Name(), ".md") {
 				continue
@@ -190,10 +236,13 @@ func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage)
 			}
 
 			contentStr := string(content)
+
+			// Quick check if file contains the query
 			if !strings.Contains(strings.ToLower(contentStr), queryLower) {
 				continue
 			}
 
+			// Extract matching lines with context
 			matches := []string{}
 			if reErr == nil {
 				scanner := bufio.NewScanner(bytes.NewReader(content))
@@ -202,6 +251,7 @@ func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage)
 					lineNum++
 					line := scanner.Text()
 					if re.MatchString(line) {
+						// Include 2 lines before and after for context
 						contextStart := maxInt(0, lineNum-2)
 						contextEnd := minInt(lineNum+2, len(strings.Split(contentStr, "\n")))
 
@@ -209,6 +259,7 @@ func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage)
 						context := strings.Join(lines[contextStart:contextEnd], "\n")
 						matches = append(matches, fmt.Sprintf("Line %d:\n%s", lineNum, context))
 
+						// Limit matches per file to prevent overwhelming output
 						if len(matches) >= 5 {
 							break
 						}
@@ -232,17 +283,22 @@ func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage)
 	}, nil
 }
 
+// ListForks returns all available fork names from the repository.
+// It checks the actual directories present rather than just returning the hardcoded list.
 func (sm *SpecsManager) ListForks(ctx context.Context) (interface{}, error) {
 	actualForks := []string{}
 
+	// Check which forks actually exist in the repository
 	specsPath := filepath.Join(sm.repoPath, "specs")
 	entries, err := os.ReadDir(specsPath)
 	if err != nil {
+		// If we can't read the directory, return the known fork list
 		return map[string]interface{}{
 			"forks": availableForks,
 		}, nil
 	}
 
+	// Match directory names against known forks
 	for _, entry := range entries {
 		if entry.IsDir() {
 			for _, fork := range availableForks {
@@ -254,6 +310,7 @@ func (sm *SpecsManager) ListForks(ctx context.Context) (interface{}, error) {
 		}
 	}
 
+	// Fallback to known forks if none found (shouldn't happen)
 	if len(actualForks) == 0 {
 		actualForks = availableForks
 	}
@@ -263,6 +320,8 @@ func (sm *SpecsManager) ListForks(ctx context.Context) (interface{}, error) {
 	}, nil
 }
 
+// CompareForks generates a diff between the same topic across two different forks.
+// This helps understand how specifications evolved between protocol upgrades.
 func (sm *SpecsManager) CompareForks(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Fork1 string `json:"fork1"`
@@ -274,13 +333,16 @@ func (sm *SpecsManager) CompareForks(ctx context.Context, params json.RawMessage
 		return nil, fmt.Errorf("invalid parameters: %w", err)
 	}
 
+	// Validate both forks
 	if !sm.isValidFork(args.Fork1) || !sm.isValidFork(args.Fork2) {
 		return nil, fmt.Errorf("invalid fork specified")
 	}
 
+	// Build paths to both specification files
 	spec1Path := filepath.Join(sm.repoPath, "specs", args.Fork1, args.Topic+".md")
 	spec2Path := filepath.Join(sm.repoPath, "specs", args.Fork2, args.Topic+".md")
 
+	// Read both files (errors handled below)
 	content1, err1 := os.ReadFile(spec1Path)
 	content2, err2 := os.ReadFile(spec2Path)
 
@@ -290,17 +352,21 @@ func (sm *SpecsManager) CompareForks(ctx context.Context, params json.RawMessage
 		"topic": args.Topic,
 	}
 
+	// Handle cases where topic doesn't exist in one or both forks
 	if err1 != nil && err2 != nil {
 		return nil, fmt.Errorf("topic not found in either fork")
 	}
 
 	if err1 != nil {
+		// Topic only exists in fork2 (new in this fork)
 		result["status"] = fmt.Sprintf("Topic only exists in %s", args.Fork2)
 		result["content_fork2"] = string(content2)
 	} else if err2 != nil {
+		// Topic only exists in fork1 (removed in fork2)
 		result["status"] = fmt.Sprintf("Topic only exists in %s", args.Fork1)
 		result["content_fork1"] = string(content1)
 	} else {
+		// Topic exists in both: compute diff
 		lines1 := strings.Split(string(content1), "\n")
 		lines2 := strings.Split(string(content2), "\n")
 
@@ -312,16 +378,19 @@ func (sm *SpecsManager) CompareForks(ctx context.Context, params json.RawMessage
 	return result, nil
 }
 
+// GetConstant searches for and retrieves the value of a protocol constant.
+// Constants are typically defined in markdown tables within the specifications.
 func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Name string `json:"name"`
-		Fork string `json:"fork,omitempty"`
+		Fork string `json:"fork,omitempty"` // Optional: specific fork
 	}
 
 	if err := json.Unmarshal(params, &args); err != nil {
 		return nil, fmt.Errorf("invalid parameters: %w", err)
 	}
 
+	// Determine which forks to search
 	searchForks := []string{}
 	if args.Fork != "" {
 		if !sm.isValidFork(args.Fork) {
@@ -329,14 +398,19 @@ func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage)
 		}
 		searchForks = []string{args.Fork}
 	} else {
+		// Search newest forks first when no fork specified
 		for i := len(availableForks) - 1; i >= 0; i-- {
 			searchForks = append(searchForks, availableForks[i])
 		}
 	}
 
 	results := map[string]interface{}{}
+
+	// Pattern to match constants in markdown tables
+	// Format: | CONSTANT_NAME | value | description |
 	constantPattern := regexp.MustCompile(fmt.Sprintf(`(?m)^\|\s*%s\s*\|\s*([^|]+)\s*\|`, regexp.QuoteMeta(args.Name)))
 
+	// Search through each fork's specifications
 	for _, fork := range searchForks {
 		forkPath := filepath.Join(sm.repoPath, "specs", fork)
 		entries, err := os.ReadDir(forkPath)
@@ -344,6 +418,7 @@ func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage)
 			continue
 		}
 
+		// Check each specification file
 		for _, entry := range entries {
 			if !strings.HasSuffix(entry.Name(), ".md") {
 				continue
@@ -355,10 +430,12 @@ func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage)
 				continue
 			}
 
+			// Look for the constant in the file
 			matches := constantPattern.FindAllStringSubmatch(string(content), -1)
 			if len(matches) > 0 {
 				value := strings.TrimSpace(matches[0][1])
 
+				// Organize results by fork and topic
 				if _, exists := results[fork]; !exists {
 					results[fork] = map[string]interface{}{}
 				}
@@ -380,6 +457,7 @@ func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage)
 	}, nil
 }
 
+// isValidFork checks if a fork name is in the list of known forks.
 func (sm *SpecsManager) isValidFork(fork string) bool {
 	for _, f := range availableForks {
 		if f == fork {
@@ -389,12 +467,17 @@ func (sm *SpecsManager) isValidFork(fork string) bool {
 	return false
 }
 
+// computeSimpleDiff generates a line-by-line diff between two text files.
+// It uses a simple algorithm with lookahead to detect insertions, deletions, and changes.
+// The diff is limited to 100 changes to prevent overwhelming output.
 func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]interface{} {
 	diff := []map[string]interface{}{}
 
 	i, j := 0, 0
 	for i < len(lines1) || j < len(lines2) {
+		// Handle end of file cases
 		if i >= len(lines1) {
+			// Remaining lines in file2 are additions
 			diff = append(diff, map[string]interface{}{
 				"type":     "added",
 				"line":     lines2[j],
@@ -402,6 +485,7 @@ func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]
 			})
 			j++
 		} else if j >= len(lines2) {
+			// Remaining lines in file1 are deletions
 			diff = append(diff, map[string]interface{}{
 				"type":     "removed",
 				"line":     lines1[i],
@@ -409,15 +493,19 @@ func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]
 			})
 			i++
 		} else if lines1[i] == lines2[j] {
+			// Lines match, advance both pointers
 			i++
 			j++
 		} else {
+			// Lines differ: use lookahead to find next matching lines
 			lookahead := 5
 			found := false
 
+			// Try to find matching lines within lookahead window
 			for k := 1; k <= lookahead && i+k < len(lines1); k++ {
 				for l := 0; l <= lookahead && j+l < len(lines2); l++ {
 					if lines1[i+k] == lines2[j+l] {
+						// Found match: mark intervening lines as removed/added
 						for m := 0; m < k; m++ {
 							diff = append(diff, map[string]interface{}{
 								"type":     "removed",
@@ -443,6 +531,7 @@ func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]
 				}
 			}
 
+			// No match found within lookahead: treat as changed line
 			if !found {
 				diff = append(diff, map[string]interface{}{
 					"type":     "changed",
@@ -455,6 +544,7 @@ func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]
 			}
 		}
 
+		// Limit diff size to prevent excessive output
 		if len(diff) > 100 {
 			diff = append(diff, map[string]interface{}{
 				"type":    "truncated",
@@ -467,6 +557,7 @@ func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]
 	return diff
 }
 
+// minInt returns the smaller of two integers.
 func minInt(a, b int) int {
 	if a < b {
 		return a
@@ -474,6 +565,7 @@ func minInt(a, b int) int {
 	return b
 }
 
+// maxInt returns the larger of two integers.
 func maxInt(a, b int) int {
 	if a > b {
 		return a

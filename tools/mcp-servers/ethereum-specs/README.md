@@ -160,7 +160,7 @@ The server accepts the following environment variables:
 
 ## Repository Management
 
-The server clones the ethereum/consensus-specs repository to `~/.ethereum-specs` on first run. 
+The server clones the ethereum/consensus-specs repository locally to `.consensus-specs/` in the server's directory. This keeps everything self-contained within the project and doesn't pollute your home directory.
 
 When auto-update is enabled, the server will:
 1. Clone the repository if it doesn't exist
@@ -168,6 +168,12 @@ When auto-update is enabled, the server will:
 3. Cache frequently accessed specifications in memory
 
 Updates run in the background to avoid blocking server startup.
+
+The local repository is:
+- Automatically created on first run
+- Updated in the background when auto-update is enabled
+- Excluded from git via `.gitignore`
+- Cleaned up when running `make clean`
 
 ## Architecture
 
@@ -218,13 +224,14 @@ The server logs to stderr to avoid interfering with the MCP protocol on stdout. 
 ### Repository not updating
 - Check internet connectivity
 - Verify Git is installed: `which git`
-- Check write permissions to `~/.ethereum-specs`
+- Check write permissions to the server directory
 - Review logs for Git errors
 
 ### Tool errors
-- Ensure the repository is cloned: `ls ~/.ethereum-specs`
+- Ensure the repository is cloned: `ls .consensus-specs/` (in the server directory)
 - Check that the requested fork/topic exists
 - Verify the branch contains the expected specifications
+- Run `make clean && make build` to force a fresh clone
 
 ## License
 

@@ -2,9 +2,9 @@
   "name": "ethereum-specs",
   "description": "Access Ethereum consensus specifications for all forks (phase0, altair, bellatrix, capella, deneb, electra, fulu)",
   "implementation": "tools/mcp-servers/ethereum-specs",
-  "entry_point": "index.js",
+  "entry_point": "bin/ethereum-specs-mcp",
   "version": "1.0.0",
-  "runtime": "node",
+  "runtime": "binary",
   "build_command": "make build",
   "config_prompts": {
     "auto_update": {
@@ -14,7 +14,7 @@
     },
     "specs_branch": {
       "prompt": "Specs branch to track",
-      "default": "dev",
+      "default": "master",
       "description": "Branch of ethereum/consensus-specs to use (dev, master, etc)"
     }
   }

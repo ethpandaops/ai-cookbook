@@ -24,3 +24,6 @@ go.work.sum
 # OS files
 .DS_Store
 Thumbs.db
+
+# Cloned consensus-specs repository
+.consensus-specs/

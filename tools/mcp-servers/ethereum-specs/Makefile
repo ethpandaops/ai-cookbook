@@ -32,7 +32,8 @@ deps:
 clean:
 	@rm -f $(BUILD_DIR)/$(BINARY_NAME)
 	@rm -f /tmp/ethereum-specs-mcp.log
-	@echo "🧹 Cleaned build artifacts"
+	@rm -rf .consensus-specs/
+	@echo "🧹 Cleaned build artifacts and local repository"
 
 test:
 	@go test -v -race -coverprofile=coverage.out ./...
