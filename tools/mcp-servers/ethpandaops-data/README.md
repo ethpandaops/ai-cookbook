@@ -12,6 +12,8 @@ A minimal MCP (Model Context Protocol) server that provides access to ethPandaOp
 - **Token management** - Configure which environment variable contains your Grafana token
 - **Multi-datasource support** - Pass `datasource_uid` when there are multiple of a type
 - **ai-cookbook integration** - Automated installation and configuration via ai-cookbook
+- **Result persistence** - Default to saving large query outputs under `/tmp/ai-cookbook-grafana` with catalog metadata and resource URIs
+- **Visualization-ready workflow** - Built-in helper tools explain how to feed saved datasets into Vega-Lite or VChart MCP servers
 
 ## Installation
 
@@ -82,6 +84,13 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
 - `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
+- `GRAFANA_RESULT_DIR` (optional): Directory for persisted query results (default: `/tmp/ai-cookbook-grafana`).
+- `GRAFANA_MAX_PREVIEW_BYTES` (optional): Maximum bytes returned by `fetch_result` previews (default: `4096`).
+- `GRAFANA_MAX_RESOURCE_BYTES` (optional): Maximum bytes readable via `resources/read` (default: `5242880`).
+- `GRAFANA_RESULT_TTL_HOURS` (optional): Automatically delete stored results older than this many hours (default: disabled).
+- `GRAFANA_CATALOG_LOCK_TIMEOUT_MS` (optional): Milliseconds to wait when acquiring the catalog lock (default: `5000`).
+- `GRAFANA_CATALOG_LOCK_POLL_MS` (optional): Backoff duration between lock attempts (default: `50`).
+- `GRAFANA_CATALOG_LOCK_STALE_MS` (optional): Consider the lock stale and reclaim it after this many milliseconds (default: `60000`).
 
 Token configuration: Either set `GRAFANA_SERVICE_TOKEN` directly, or use `GRAFANA_SERVICE_TOKEN_ENV_VAR` to specify which environment variable contains your token.
 
@@ -116,32 +125,52 @@ To enable only specific datasources by their UID:
 }
 ```
 
+## Result Storage & Visualization Workflow
+
+All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and return a `result_id`, `resource_uri`, and absolute `file_path` for downstream use:
+
+1. Run `clickhouse_tool`, `prometheus_tool`, or `loki_tool`. Keep the returned `result_id` and `file_path`.
+2. Point visualization MCPs (or any other tooling) at `file_path` to load the dataset directly without routing the bytes through the conversation.
+3. When you only need a quick glance, call `fetch_result` (small preview capped by `GRAFANA_MAX_PREVIEW_BYTES`) or `resources/read` if the artifact is small enough.
+4. Clean up with `delete_result` or `trim_results`, or enable `GRAFANA_RESULT_TTL_HOURS` for automatic pruning.
+
+> Note: catalog mutations are guarded by a simple filesystem lock (`catalog.lock`) so multiple Grafana MCP instances can share the same result directory safely.
+
 ## Available Tools
 
 ### Tools
 
 - `health_check`
-  - Verify connection to Grafana and check authentication status.
-  - Returns: `healthy` (boolean), `grafana_url`, `authenticated`, `user`, `datasources_discovered`, error messages and help.
-  - No parameters required.
+  - Verify connectivity, authentication, storage configuration, and catalog size.
+  - Returns Grafana user info, discovered datasources, result storage defaults, and preview limits.
 
 - `list_datasources`
-  - List all discovered datasources (UID, name, type, description).
-  - Params: `type` (optional: `loki` | `prometheus` | `clickhouse`).
+  - List discovered datasources (UID, name, type, description) with optional type filter.
+  - Params: `type` (`loki` | `prometheus` | `clickhouse`).
 
 - `loki_tool`
-  - Actions: `query`, `labels`, `label_values`.
-  - Common params: `start` (default: `now-1h`), `end` (default: `now`), `datasource_uid` (required if multiple Loki datasources).
-  - For `query`: `query` (LogQL), `limit` (default: 100).
-  - For `label_values`: `label`.
+  - Interact with Loki (`query`, `labels`, `label_values`).
+  - Stores results to disk and returns metadata (`result_id`, `file_path`, `resource_uri`).
 
 - `prometheus_tool`
-  - Modes: `instant` or `range`.
-  - Params: `query` (PromQL), `mode`, `time` (instant), `start`, `end`, `step` (range), `datasource_uid`.
+  - Run instant or range PromQL queries.
+  - Stores results to disk and returns metadata (`result_id`, `file_path`, `resource_uri`).
 
 - `clickhouse_tool`
-  - Params: `sql` (required), `from` (default: `now-1h`), `to` (default: `now`), `datasource_uid`.
-  - Uses Grafana’s unified data query API; requires a ClickHouse datasource that supports raw SQL in Grafana.
+  - Execute raw SQL through Grafana’s unified data query API.
+  - Stores results to disk and returns metadata (`result_id`, `file_path`, `resource_uri`).
+
+- `describe_result`
+  - Return metadata for a specific `result_id` (resource URI, summary, sizes).
+
+- `fetch_result`
+  - Retrieve a capped inline preview (`preview_text`) or call `resources/read` with the `resource_uri` for the full payload when within limits.
+
+- `delete_result`
+  - Remove a stored result and optionally delete its cached artifact.
+
+- `trim_results`
+  - Bulk-prune saved results by age (`max_age_hours`) or by keeping only the most recent (`max_results`).
 
 ## Adding New Datasource Types
 
