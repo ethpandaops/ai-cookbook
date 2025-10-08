@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "axios": "^1.7.9"
+    "axios": "^1.7.9",
+    "node-jq": "^6.3.1",
+    "to-json-schema": "^0.2.5"
   },
   "engines": {
     "node": ">=18.0.0"

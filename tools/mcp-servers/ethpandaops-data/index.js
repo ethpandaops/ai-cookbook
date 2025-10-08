@@ -15,6 +15,8 @@ import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import crypto from 'crypto';
+import toJsonSchema from 'to-json-schema';
+import jq from 'node-jq';
 import { parseTime, parseDurationToSeconds, normalizeType, requireUidForType as baseRequireUidForType } from './utils.js';
 
 const GRAFANA_URL = process.env.GRAFANA_URL || 'https://grafana.primary.production.platform.ethpandaops.io';
@@ -49,15 +51,24 @@ const CATALOG_LOCK_TIMEOUT_MS = parseEnvInt('GRAFANA_CATALOG_LOCK_TIMEOUT_MS', 5
 const CATALOG_LOCK_POLL_MS = parseEnvInt('GRAFANA_CATALOG_LOCK_POLL_MS', 50);
 const CATALOG_LOCK_STALE_MS = parseEnvInt('GRAFANA_CATALOG_LOCK_STALE_MS', 60000);
 
-const WORKFLOW_INSTRUCTIONS = `Use this server to run Grafana-backed queries. By default, large query results are persisted locally and referenced via resource URIs.
+const WORKFLOW_INSTRUCTIONS = `Use this server to run Grafana-backed queries. Tool calls NEVER return actual data - only structure and schema.
 
 Workflow:
-1. Call clickhouse_tool, prometheus_tool, or loki_tool.
-2. Responses return a result_id, resource_uri, and absolute file_path for downstream tools to load directly.
-3. Ask fetch_result or resources/read for metadata/preview if needed, then hand the file to visualization servers (e.g., Vega-Lite or VChart).
-4. Remove cached data with delete_result or trim_results when finished.`;
+1. Call clickhouse_tool, prometheus_tool, or loki_tool
+2. Tool returns result_id, resource_uri, JSON schema, and metadata (row counts, etc.)
+3. To access actual data, use resources/read with the resource_uri:
+   - Basic: resources/read with the exact resource_uri
+   - Paginated: Add ?limit=N&offset=M query parameters
+   - Filtered: Add ?jq=EXPRESSION for complex filtering
+4. Optional: Call describe_result for detailed schema and usage examples
+5. Clean up with delete_result or trim_results when done
+
+Example flow:
+  clickhouse_tool(...) → { schema, metadata, resource_uri }
+  resources/read: resource_uri?limit=100 → actual data (first 100 items)`;
 
 const RESULT_FILE_EXTENSION = 'json';
+const MAX_SCHEMA_SAMPLE_SIZE = 3; // Number of items to sample when generating schema
 
 let catalog = new Map();
 let storageInitialized = false;
@@ -71,7 +82,6 @@ let enabledDatasources = {};
 let DATASOURCE_DESCRIPTIONS = {};
 
 const RESOURCE_URI_PREFIX = 'mcp://ethpandaops-data/result/';
-const MAX_PREVIEW_ROWS = 10;
 
 function resultIdToUri(id) {
   return `${RESOURCE_URI_PREFIX}${id}`;
@@ -209,87 +219,133 @@ function computeArgsHash(args = {}) {
   return hasher.digest('hex');
 }
 
-function collectClickhouseSummary(raw) {
-  const resultBlocks = raw?.results || {};
-  let totalRows = 0;
-  const columnsSet = new Set();
-  const frames = [];
-  const preview = [];
+/**
+ * Generates a JSON schema from data with optimizations to reduce token usage
+ */
+function generateDataSchema(data, options = {}) {
+  const sampleSize = options.sampleSize || MAX_SCHEMA_SAMPLE_SIZE;
 
-  for (const [refId, block] of Object.entries(resultBlocks)) {
-    const frameList = Array.isArray(block?.frames) ? block.frames : [];
-    frameList.forEach((frame, index) => {
-      const schemaFields = Array.isArray(frame?.schema?.fields) ? frame.schema.fields : [];
-      const columnNames = schemaFields.map((field, colIdx) => field?.name || field?.config?.displayName || `col_${colIdx}`);
-      const values = Array.isArray(frame?.data?.values) ? frame.data.values : [];
-      const rowCount = values.length > 0 ? values[0].length : 0;
-      totalRows += rowCount;
-      columnNames.forEach((name) => columnsSet.add(name));
-      frames.push({
-        refId,
-        name: frame?.name || `${refId}[${index}]`,
-        rowCount,
-        columnCount: columnNames.length,
-      });
-      for (let rowIndex = 0; rowIndex < rowCount && preview.length < MAX_PREVIEW_ROWS; rowIndex += 1) {
-        const row = {};
-        columnNames.forEach((colName, colIdx) => {
-          const columnValues = values[colIdx];
-          row[colName] = Array.isArray(columnValues) ? columnValues[rowIndex] : null;
-        });
-        preview.push(row);
+  // Create a representative sample for schema generation
+  const sample = createSchemaSample(data, sampleSize);
+
+  // Generate schema with optimizations
+  const schema = toJsonSchema(sample, {
+    required: false,
+    postProcessFnc: (type, schema, obj, defaultFunc) => {
+      const result = defaultFunc(type, schema, obj);
+
+      // Remove examples to save tokens
+      delete result.examples;
+      delete result.default;
+
+      // For arrays, just note the count instead of full schema duplication
+      if (type === 'array' && Array.isArray(obj)) {
+        result.minItems = obj.length;
+        result.maxItems = obj.length;
       }
-    });
+
+      return result;
+    }
+  });
+
+  return schema;
+}
+
+/**
+ * Creates a representative sample from data for schema generation
+ */
+function createSchemaSample(data, sampleSize) {
+  if (!data || typeof data !== 'object') {
+    return data;
   }
 
-  return {
-    row_count: totalRows,
-    column_count: columnsSet.size,
-    columns: Array.from(columnsSet),
-    frames,
-    preview,
-  };
+  if (Array.isArray(data)) {
+    // For arrays, take first few items
+    return data.slice(0, sampleSize);
+  }
+
+  // For objects, recursively sample nested arrays
+  const sample = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (Array.isArray(value) && value.length > sampleSize) {
+      sample[key] = value.slice(0, sampleSize);
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      sample[key] = createSchemaSample(value, sampleSize);
+    } else {
+      sample[key] = value;
+    }
+  }
+
+  return sample;
 }
 
-function collectPrometheusSummary(raw) {
-  const status = raw?.status || 'unknown';
-  const resultType = raw?.data?.resultType || 'unknown';
-  const series = Array.isArray(raw?.data?.result) ? raw.data.result : [];
-  let sampleCount = 0;
-  series.forEach((seriesItem) => {
-    const values = Array.isArray(seriesItem?.values) ? seriesItem.values : [];
-    if (values.length > 0) {
-      sampleCount += values.length;
-    } else if (Array.isArray(seriesItem?.value)) {
-      sampleCount += 1;
-    }
-  });
-  return {
-    status,
-    result_type: resultType,
-    series_count: series.length,
-    sample_count: sampleCount,
-  };
-}
+/**
+ * Collects metadata about the result (row counts, sizes, etc.)
+ */
+function collectResultMetadata(raw, toolName) {
+  if (toolName === 'clickhouse_tool') {
+    const resultBlocks = raw?.results || {};
+    let totalRows = 0;
+    let totalColumns = 0;
 
-function collectLokiSummary(raw) {
-  const resultType = raw?.data?.resultType || 'unknown';
-  const streams = Array.isArray(raw?.data?.result) ? raw.data.result : [];
-  let entryCount = 0;
-  const preview = [];
-  streams.forEach((stream) => {
-    const values = Array.isArray(stream?.values) ? stream.values : [];
-    entryCount += values.length;
-    for (let idx = 0; idx < values.length && preview.length < MAX_PREVIEW_ROWS; idx += 1) {
-      const [ts, line] = values[idx];
-      preview.push({ ts, line, labels: stream?.stream });
+    for (const block of Object.values(resultBlocks)) {
+      const frames = Array.isArray(block?.frames) ? block.frames : [];
+      for (const frame of frames) {
+        const values = Array.isArray(frame?.data?.values) ? frame.data.values : [];
+        if (values.length > 0) {
+          totalRows += values[0].length || 0;
+          totalColumns = Math.max(totalColumns, values.length);
+        }
+      }
     }
-  });
+
+    return {
+      data_type: 'tabular',
+      row_count: totalRows,
+      column_count: totalColumns,
+      frame_count: Object.keys(resultBlocks).length
+    };
+  }
+
+  if (toolName === 'prometheus_tool') {
+    const series = Array.isArray(raw?.data?.result) ? raw.data.result : [];
+    let sampleCount = 0;
+
+    for (const seriesItem of series) {
+      const values = Array.isArray(seriesItem?.values) ? seriesItem.values : [];
+      sampleCount += values.length || (Array.isArray(seriesItem?.value) ? 1 : 0);
+    }
+
+    return {
+      data_type: 'time_series',
+      series_count: series.length,
+      sample_count: sampleCount,
+      result_type: raw?.data?.resultType || 'unknown'
+    };
+  }
+
+  if (toolName === 'loki_tool') {
+    const streams = Array.isArray(raw?.data?.result) ? raw.data.result : [];
+    let entryCount = 0;
+
+    for (const stream of streams) {
+      const values = Array.isArray(stream?.values) ? stream.values : [];
+      entryCount += values.length;
+    }
+
+    return {
+      data_type: 'log_streams',
+      stream_count: streams.length,
+      entry_count: entryCount,
+      result_type: raw?.data?.resultType || 'unknown'
+    };
+  }
+
+  // Unknown tool - use generic metadata
   return {
-    result_type: resultType,
-    stream_count: streams.length,
-    entry_count: entryCount,
-    preview,
+    data_type: 'unknown',
+    is_array: Array.isArray(raw),
+    is_object: raw && typeof raw === 'object'
   };
 }
 
@@ -343,38 +399,80 @@ async function persistResultEntry({
   return entry;
 }
 
-function buildResourceSummaryPayload({ entry, summary }) {
-  return {
-    delivery: 'resource',
-    result_id: entry.id,
-    resource_uri: resultIdToUri(entry.id),
-    file_path: entry.file_path,
-    format: entry.format,
-    size_bytes: entry.size_bytes,
-    summary,
-    saved_at: entry.created_at,
-    guidance: [
-      'Provide file_path to downstream tools that can read local files.',
-      'Call resources/read with resource_uri when you need the full serialized payload.',
-      'Use fetch_result with max_preview_bytes for a small inline preview if needed.',
-    ],
-  };
+/**
+ * Formats bytes to human-readable string
+ */
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} bytes`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-async function respondWithResult({ toolName, args, datasourceUid, rawResult, summary }) {
+/**
+ * Responds with result structure and schema only.
+ * Never returns actual data - forces LLM to use resources/read with filters.
+ */
+async function respondWithResult({ toolName, args, datasourceUid, rawResult }) {
   const serialized = JSON.stringify(rawResult);
   const sizeBytes = Buffer.byteLength(serialized, 'utf8');
 
+  // Generate schema and metadata
+  const schema = generateDataSchema(rawResult);
+  const metadata = collectResultMetadata(rawResult, toolName);
+
+  // Always persist the result
   const entry = await persistResultEntry({
     toolName,
     datasourceUid,
     args,
     rawResult: serialized,
-    summary,
-    deliveryMeta: { resolved: 'resource', size_bytes: sizeBytes },
+    summary: { ...metadata, schema },
+    deliveryMeta: { size_bytes: sizeBytes },
   });
 
-  return buildResourceSummaryPayload({ entry, summary });
+  const baseUri = resultIdToUri(entry.id);
+
+  // Generate quick access examples
+  const quickAccess = [];
+  quickAccess.push(`Full data: ${baseUri}`);
+  quickAccess.push(`Paginated: ${baseUri}?limit=100`);
+
+  if (metadata.data_type === 'time_series') {
+    quickAccess.push(`Filtered: ${baseUri}?jq=.data.result[]|select(.metric.job=="prometheus")`);
+  } else if (metadata.data_type === 'log_streams') {
+    quickAccess.push(`Filtered: ${baseUri}?jq=.data.result[].values[]|select(.[1]|contains("ERROR"))`);
+  } else if (metadata.data_type === 'tabular') {
+    quickAccess.push(`Filtered: ${baseUri}?jq=.results.A.frames[0].data.values`);
+  }
+
+  // Always return structure-only
+  return {
+    result_id: entry.id,
+    resource_uri: baseUri,
+
+    size: formatBytes(sizeBytes),
+    size_bytes: sizeBytes,
+
+    metadata: {
+      data_type: metadata.data_type,
+      row_count: metadata.row_count,
+      column_count: metadata.column_count,
+      series_count: metadata.series_count,
+      sample_count: metadata.sample_count,
+      stream_count: metadata.stream_count,
+      entry_count: metadata.entry_count,
+      result_type: metadata.result_type,
+      frame_count: metadata.frame_count,
+    },
+
+    schema,
+
+    access: {
+      describe: `Call describe_result with result_id="${entry.id}" for detailed schema and examples`,
+      read: `Call resources/read with URI from quick_access below`,
+      quick_access: quickAccess,
+    },
+  };
 }
 
 function getCatalogEntryOrThrow(resultId) {
@@ -618,8 +716,20 @@ const toolHandlers = {
           uid: ds.uid
         })),
         catalog_entries: catalog.size,
-        max_preview_bytes: MAX_PREVIEW_BYTES,
-        message: datasourceCount === 0 
+        result_storage: {
+          directory: RESULTS_DIR,
+          max_resource_size: formatBytes(MAX_RESOURCE_BYTES),
+          max_preview_size: formatBytes(MAX_PREVIEW_BYTES),
+        },
+        features: [
+          'Tools NEVER return data inline - only schema and metadata',
+          'Automatic JSON schema generation for all query results',
+          'All results saved to disk with resource URIs for access',
+          'Resource templates with filtering (?limit, ?offset, ?jq)',
+          'JQ expression filtering for complex queries',
+          'Consistent behavior prevents context flooding',
+        ],
+        message: datasourceCount === 0
           ? 'Connected to Grafana but no datasources discovered. Check permissions or datasource configuration.'
           : `Successfully connected. ${datasourceCount} datasource(s) available.`
       };
@@ -677,22 +787,11 @@ const toolHandlers = {
       throw new Error(`Unknown action for loki_tool: ${action}`);
     }
 
-    const summary = {
-      ...collectLokiSummary(rawResult),
-      action,
-      query,
-      start,
-      end,
-      limit,
-      label,
-    };
-
     return respondWithResult({
       toolName: 'loki_tool',
       args,
       datasourceUid,
       rawResult,
-      summary,
     });
   },
 
@@ -724,22 +823,11 @@ const toolHandlers = {
       throw new Error(`Unknown mode for prometheus_tool: ${mode}`);
     }
 
-    const summary = {
-      ...collectPrometheusSummary(rawResult),
-      mode,
-      query,
-      start,
-      end,
-      step,
-      time,
-    };
-
     return respondWithResult({
       toolName: 'prometheus_tool',
       args,
       datasourceUid,
       rawResult,
-      summary,
     });
   },
 
@@ -804,19 +892,12 @@ const toolHandlers = {
     }
 
     const rawResult = await grafanaDsQueryPost(body);
-    const summary = {
-      ...collectClickhouseSummary(rawResult),
-      from,
-      to,
-      sql,
-    };
 
     return respondWithResult({
       toolName: 'clickhouse_tool',
       args,
       datasourceUid,
       rawResult,
-      summary,
     });
   },
 
@@ -827,17 +908,59 @@ const toolHandlers = {
     await ensureStorage();
     await loadCatalogFromDisk();
     const entry = getCatalogEntryOrThrow(result_id);
+
+    const baseUri = resultIdToUri(entry.id);
+    const metadata = entry.summary || {};
+
+    // Generate usage examples based on data type
+    const examples = [];
+    examples.push(`Basic access: ${baseUri}`);
+    examples.push(`With pagination: ${baseUri}?limit=100&offset=0`);
+
+    if (metadata.data_type === 'time_series') {
+      examples.push(`Filter by metric: ${baseUri}?jq=.data.result[]|select(.metric.job=="prometheus")`);
+      examples.push(`Get metric names: ${baseUri}?jq=.data.result[].metric.__name__|unique`);
+    } else if (metadata.data_type === 'log_streams') {
+      examples.push(`Filter logs: ${baseUri}?jq=.data.result[].values[]|select(.[1]|contains("ERROR"))`);
+      examples.push(`Get stream labels: ${baseUri}?jq=.data.result[].stream|unique`);
+    } else if (metadata.data_type === 'tabular') {
+      examples.push(`First 10 rows: ${baseUri}?limit=10`);
+      examples.push(`Custom selection: ${baseUri}?jq=.results.A.frames[0].data.values`);
+    }
+
     return {
       result_id,
       tool: entry.tool,
       datasource_uid: entry.datasource_uid,
       created_at: entry.created_at,
+      size: formatBytes(entry.size_bytes),
       size_bytes: entry.size_bytes,
       format: entry.format,
-      resource_uri: resultIdToUri(entry.id),
-      summary: entry.summary,
-      delivery_meta: entry.delivery_meta,
-      input: entry.input,
+      resource_uri: baseUri,
+      file_path: entry.file_path,
+
+      metadata: {
+        data_type: metadata.data_type,
+        row_count: metadata.row_count,
+        column_count: metadata.column_count,
+        series_count: metadata.series_count,
+        sample_count: metadata.sample_count,
+        stream_count: metadata.stream_count,
+        entry_count: metadata.entry_count,
+        result_type: metadata.result_type,
+      },
+
+      schema: metadata.schema,
+
+      query_input: entry.input,
+
+      usage_examples: examples,
+
+      filters_available: [
+        'limit=N - Return max N items',
+        'offset=N - Skip N items',
+        'jq=EXPRESSION - Apply JQ expression for complex filtering',
+      ],
     };
   },
 
@@ -1133,52 +1256,117 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 server.setRequestHandler(ListResourcesRequestSchema, async () => {
   await ensureStorage();
   await loadCatalogFromDisk();
-  const resources = catalogEntriesSorted().map((entry) => ({
-    uri: resultIdToUri(entry.id),
-    name: entry.id,
-    description: `Saved ${entry.tool} result (${entry.format})`,
-    mimeType: 'application/json',
-    _meta: {
-      result_id: entry.id,
-      tool: entry.tool,
-      datasource_uid: entry.datasource_uid,
-      created_at: entry.created_at,
-      size_bytes: entry.size_bytes,
+
+  const resources = catalogEntriesSorted().map((entry) => {
+    const metadata = entry.summary || {};
+    return {
+      uri: resultIdToUri(entry.id),
+      name: `${entry.tool} result (${formatBytes(entry.size_bytes)})`,
+      description: `${metadata.data_type || 'data'} from ${entry.tool}${metadata.row_count ? `, ${metadata.row_count} rows` : ''}${metadata.series_count ? `, ${metadata.series_count} series` : ''}${metadata.stream_count ? `, ${metadata.stream_count} streams` : ''}`,
+      mimeType: 'application/json',
+      _meta: {
+        result_id: entry.id,
+        tool: entry.tool,
+        datasource_uid: entry.datasource_uid,
+        created_at: entry.created_at,
+        size_bytes: entry.size_bytes,
+        ...metadata,
+      },
+    };
+  });
+
+  const resourceTemplates = [
+    {
+      uriTemplate: `${RESOURCE_URI_PREFIX}{id}{?limit,offset,jq}`,
+      name: 'Filtered Query Result',
+      description: 'Access query results with optional filtering. Supports: limit (max items), offset (skip items), jq (JQ expression for filtering)',
+      mimeType: 'application/json',
     },
-  }));
-  return { resources };
+  ];
+
+  return { resources, resourceTemplates };
 });
 
 server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
   await ensureStorage();
-  const resultId = uriToResultId(request.params.uri);
-  if (!resultId) {
-    throw new McpError(ErrorCode.InvalidParams, `Unsupported resource URI: ${request.params.uri}`);
+
+  // Parse URI and query parameters
+  const uri = new URL(request.params.uri, 'http://dummy');
+  const pathParts = uri.pathname.split('/');
+  const resultId = pathParts[pathParts.length - 1];
+
+  if (!resultId || !catalog.has(resultId)) {
+    throw new McpError(ErrorCode.InvalidParams, `Invalid resource URI: ${request.params.uri}`);
   }
+
   const entry = getCatalogEntryOrThrow(resultId);
-  if (entry.size_bytes > MAX_RESOURCE_BYTES) {
+
+  // Read the data
+  const rawData = await fs.readFile(entry.file_path, 'utf8');
+  let data = JSON.parse(rawData);
+
+  // Extract query parameters
+  const limit = uri.searchParams.get('limit') ? parseInt(uri.searchParams.get('limit')) : null;
+  const offset = uri.searchParams.get('offset') ? parseInt(uri.searchParams.get('offset')) : null;
+  const jqExpression = uri.searchParams.get('jq');
+
+  // Apply JQ filtering first if specified
+  if (jqExpression) {
+    try {
+      const jqResult = await jq.run(jqExpression, data, { input: 'json', output: 'json' });
+      data = jqResult;
+    } catch (error) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Invalid JQ expression: ${error.message}\n\nExample: ?jq=.data.result[]|select(.metric.job=="prometheus")`
+      );
+    }
+  }
+
+  // Apply pagination (limit/offset) to arrays
+  if ((limit !== null || offset !== null) && Array.isArray(data)) {
+    const start = offset || 0;
+    const end = limit ? start + limit : undefined;
+    data = data.slice(start, end);
+  } else if ((limit !== null || offset !== null) && data?.data?.result && Array.isArray(data.data.result)) {
+    // Special handling for Prometheus/Loki structure
+    const start = offset || 0;
+    const end = limit ? start + limit : undefined;
+    data.data.result = data.data.result.slice(start, end);
+  }
+
+  // Serialize filtered data
+  const filteredData = JSON.stringify(data, null, 2);
+  const filteredSize = Buffer.byteLength(filteredData, 'utf8');
+
+  // Check if filtered result still exceeds limits
+  if (filteredSize > MAX_RESOURCE_BYTES) {
     throw new McpError(
       ErrorCode.InvalidParams,
-      `Resource ${resultId} is ${entry.size_bytes} bytes, exceeding MAX_RESOURCE_BYTES=${MAX_RESOURCE_BYTES}. Use fetch_result with max_bytes instead.`
+      `Filtered result still too large (${formatBytes(filteredSize)}, max: ${formatBytes(MAX_RESOURCE_BYTES)}).\n\n` +
+      `Try:\n` +
+      `- Smaller limit: ?limit=100\n` +
+      `- More specific JQ filter: ?jq=.data.result[0:10]\n` +
+      `- Combination: ?limit=50&jq=.data.result[]|select(.metric.instance=="localhost")`
     );
   }
-  const data = await fs.readFile(entry.file_path, 'utf8');
-  if (Buffer.byteLength(data, 'utf8') > MAX_RESOURCE_BYTES) {
-    throw new McpError(
-      ErrorCode.InvalidParams,
-      `Resource read exceeded MAX_RESOURCE_BYTES=${MAX_RESOURCE_BYTES}. Use fetch_result with max_bytes.`
-    );
-  }
+
   return {
     contents: [
       {
         uri: request.params.uri,
         mimeType: 'application/json',
-        text: data,
+        text: filteredData,
         _meta: {
           result_id: entry.id,
           tool: entry.tool,
-          size_bytes: entry.size_bytes,
+          original_size_bytes: entry.size_bytes,
+          filtered_size_bytes: filteredSize,
+          filters_applied: {
+            limit,
+            offset,
+            jq: jqExpression,
+          },
         },
       },
     ],
