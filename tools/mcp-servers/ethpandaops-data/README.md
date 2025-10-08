@@ -83,6 +83,7 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 - `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
+- `DATASOURCE_REQUIRED_READING` (optional): JSON map `{ "uid": "url_or_path" }` to enforce knowledge loading before querying specific datasources. When configured, the LLM must call `load_knowledge` with the datasource UID before it can query that datasource.
 - `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 30000).
 - `GRAFANA_RESULT_DIR` (optional): Directory for persisted query results (default: `/tmp/ai-cookbook-grafana`).
 - `GRAFANA_MAX_RESOURCE_BYTES` (optional): Maximum bytes readable via `resources/read` (default: `5242880`).
@@ -124,6 +125,56 @@ To enable only specific datasources by their UID:
 }
 ```
 
+## Knowledge Loading
+
+For datasources that require specific schema or documentation knowledge, you can configure required reading via the `DATASOURCE_REQUIRED_READING` environment variable. When configured, the LLM **must** call the `load_knowledge` tool before it can query that datasource.
+
+### Configuration
+
+Add required reading URLs or file paths to your MCP server configuration:
+
+```json
+{
+  "mcpServers": {
+    "ethpandaops-production-data": {
+      "env": {
+        "DATASOURCE_REQUIRED_READING": "{\"PDE22E36FB877C574\": \"https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms/clickhouse/llms.txt\"}"
+      }
+    }
+  }
+}
+```
+
+Or use a local file in `claude-code/mcp-servers/<server-name>/datasource-required-reading.json`:
+
+```json
+{
+  "PDE22E36FB877C574": "https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms/clickhouse/llms.txt"
+}
+```
+
+The installer will automatically load this file if present.
+
+### Workflow
+
+1. Call `health_check` to see which datasources require knowledge loading
+2. For datasources with `requires_knowledge: true`, call `load_knowledge({ datasource_uid: "..." })`
+3. The tool fetches the documentation and returns it to the LLM
+4. Now you can query that datasource using the normal query tools
+
+### Error Handling
+
+If you try to query a datasource that requires knowledge loading without calling `load_knowledge` first, you'll get an error like:
+
+```
+Knowledge loading required for datasource PDE22E36FB877C574.
+
+You must call the load_knowledge tool with datasource_uid="PDE22E36FB877C574" before querying this datasource.
+This datasource requires you to read: https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms/clickhouse/llms.txt
+
+Example: load_knowledge({ datasource_uid: "PDE22E36FB877C574" })
+```
+
 ## Result Storage & Visualization Workflow
 
 All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and return schema + metadata (never inline data):
@@ -144,11 +195,18 @@ All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and
 
 - `health_check`
   - Verify connectivity, authentication, storage configuration, and catalog size.
-  - Returns Grafana user info, discovered datasources, result storage defaults, and preview limits.
+  - Returns Grafana user info, discovered datasources, result storage defaults, required reading status, and preview limits.
 
 - `list_datasources`
   - List discovered datasources (UID, name, type, description) with optional type filter.
   - Params: `type` (`loki` | `prometheus` | `clickhouse`).
+
+- `load_knowledge`
+  - Load required documentation/schema information for a datasource before querying.
+  - Some datasources (configured via `DATASOURCE_REQUIRED_READING`) require knowledge to be loaded before they can be queried.
+  - This tool fetches the documentation from a URL or file path and marks the datasource as ready for querying.
+  - Params: `datasource_uid` (required)
+  - Returns: The knowledge content and confirmation that the datasource can now be queried.
 
 - `loki_tool`
   - Interact with Loki (`query`, `labels`, `label_values`).

@@ -27,6 +27,7 @@ const DATASOURCE_CONFIG = process.env.DATASOURCE_UIDS
   ? process.env.DATASOURCE_UIDS.split(',').map((s) => s.trim()).filter(Boolean)
   : [];
 const DESCRIPTIONS_JSON = process.env.DATASOURCE_DESCRIPTIONS || '';
+const REQUIRED_READING_JSON = process.env.DATASOURCE_REQUIRED_READING || '';
 const HTTP_TIMEOUT_MS = process.env.HTTP_TIMEOUT_MS ? parseInt(process.env.HTTP_TIMEOUT_MS) : 30000;
 
 const STORAGE_ROOT = process.env.GRAFANA_RESULT_DIR || path.join(os.tmpdir(), 'ai-cookbook-grafana');
@@ -43,6 +44,7 @@ function parseEnvInt(name, fallback) {
 }
 
 const MAX_RESOURCE_BYTES = parseEnvInt('GRAFANA_MAX_RESOURCE_BYTES', 5 * 1024 * 1024);
+const MAX_INLINE_BYTES = parseEnvInt('GRAFANA_MAX_INLINE_BYTES', 64 * 1024); // 64KB default
 const RESULT_TTL_HOURS = parseEnvInt('GRAFANA_RESULT_TTL_HOURS', 0); // 0 disables TTL pruning
 
 const CATALOG_LOCK_PATH = path.join(STORAGE_ROOT, 'catalog.lock');
@@ -50,21 +52,22 @@ const CATALOG_LOCK_TIMEOUT_MS = parseEnvInt('GRAFANA_CATALOG_LOCK_TIMEOUT_MS', 5
 const CATALOG_LOCK_POLL_MS = parseEnvInt('GRAFANA_CATALOG_LOCK_POLL_MS', 50);
 const CATALOG_LOCK_STALE_MS = parseEnvInt('GRAFANA_CATALOG_LOCK_STALE_MS', 60000);
 
-const WORKFLOW_INSTRUCTIONS = `Use this server to run Grafana-backed queries. Tool calls NEVER return actual data - only structure and schema.
+const WORKFLOW_INSTRUCTIONS = `Use this server to run Grafana-backed queries with support for Grafana template macros.
+
+Query Tools:
+- *_query tools (clickhouse_query, prometheus_query, loki_query): Return data inline up to 64KB for quick iteration
+- *_query_to_resource tools: Persist large results to disk and return file_path/resource_uri
+
+Grafana Macros (automatically expanded):
+- ClickHouse: $__timeFilter(column), $__fromTime, $__toTime, $__interval_s, $__timeInterval(column)
+- Prometheus: $__interval, $__rate_interval, $__range, $__range_s, $__range_ms
+- Loki: Time filtering via start/end params (no macros needed)
 
 Workflow:
-1. Call clickhouse_tool, prometheus_tool, or loki_tool
-2. Tool returns result_id, resource_uri, JSON schema, and metadata (row counts, etc.)
-3. To access actual data, use resources/read with the resource_uri:
-   - Basic: resources/read with the exact resource_uri
-   - Paginated: Add ?limit=N&offset=M query parameters
-   - Filtered: Add ?jq=EXPRESSION for complex filtering
-4. Optional: Call describe_result for detailed schema and usage examples
-5. Clean up with delete_result or trim_results when done
-
-Example flow:
-  clickhouse_tool(...) → { schema, metadata, resource_uri }
-  resources/read: resource_uri?limit=100 → actual data (first 100 items)`;
+1. Call *_query for small results or *_query_to_resource for large datasets
+2. Use Grafana macros in your queries for dynamic time filtering and intervals
+3. For persisted results, use resources/read with ?limit, ?offset, or ?jq filters
+4. Clean up with delete_result or trim_results when finished`;
 
 const RESULT_FILE_EXTENSION = 'json';
 const MAX_SCHEMA_SAMPLE_SIZE = 3; // Number of items to sample when generating schema
@@ -79,6 +82,12 @@ let enabledDatasources = {};
 
 // Optional manual descriptions map { uid: description }
 let DATASOURCE_DESCRIPTIONS = {};
+
+// Optional required reading map { uid: url_or_path }
+let DATASOURCE_REQUIRED_READING = {};
+
+// Session state: track which datasources have had their knowledge loaded
+let loadedKnowledge = new Set();
 
 const RESOURCE_URI_PREFIX = 'mcp://ethpandaops-data/result/';
 
@@ -418,6 +427,25 @@ function formatBytes(bytes) {
 }
 
 /**
+ * Responds with inline data if size is under threshold, otherwise throws error
+ */
+async function respondWithInline({ toolName, args, datasourceUid, rawResult }) {
+  const serialized = JSON.stringify(rawResult);
+  const sizeBytes = Buffer.byteLength(serialized, 'utf8');
+
+  if (sizeBytes > MAX_INLINE_BYTES) {
+    const toolNameResource = toolName.replace('_query', '_query_to_resource');
+    throw new Error(
+      `Query result too large for inline response (${formatBytes(sizeBytes)}, max: ${formatBytes(MAX_INLINE_BYTES)}).\n\n` +
+      `Use ${toolNameResource} instead to persist the result and access via resource URI.\n` +
+      `This allows filtering with ?limit, ?offset, and ?jq parameters.`
+    );
+  }
+
+  return rawResult;
+}
+
+/**
  * Responds with result structure and schema only.
  * Never returns actual data - forces LLM to use resources/read with filters.
  */
@@ -458,6 +486,7 @@ async function respondWithResult({ toolName, args, datasourceUid, rawResult }) {
   return {
     result_id: entry.id,
     resource_uri: baseUri,
+    file_path: entry.file_path,
 
     size: formatBytes(sizeBytes),
     size_bytes: sizeBytes,
@@ -566,7 +595,7 @@ function catalogEntriesSorted() {
 const server = new Server(
   {
     name: 'ethpandaops-data',
-    version: '0.3.1',
+    version: '0.4.0',
   },
   {
     capabilities: {
@@ -618,12 +647,74 @@ function loadDescriptions() {
   return map;
 }
 
+function loadRequiredReading() {
+  const map = {};
+  try {
+    if (REQUIRED_READING_JSON) {
+      Object.assign(map, JSON.parse(REQUIRED_READING_JSON));
+    }
+  } catch (e) {
+    console.error('Failed to parse DATASOURCE_REQUIRED_READING JSON:', e.message);
+  }
+  return map;
+}
+
+/**
+ * Check if a datasource requires knowledge to be loaded before querying
+ * @param {string} datasourceUid - The datasource UID to check
+ * @throws {Error} if knowledge is required but not loaded
+ */
+function validateKnowledgeLoaded(datasourceUid) {
+  if (DATASOURCE_REQUIRED_READING[datasourceUid]) {
+    if (!loadedKnowledge.has(datasourceUid)) {
+      const readingSource = DATASOURCE_REQUIRED_READING[datasourceUid];
+      throw new Error(
+        `Knowledge loading required for datasource ${datasourceUid}.\n\n` +
+        `You must call the load_knowledge tool with datasource_uid="${datasourceUid}" before querying this datasource.\n` +
+        `This datasource requires you to read: ${readingSource}\n\n` +
+        `Example: load_knowledge({ datasource_uid: "${datasourceUid}" })`
+      );
+    }
+  }
+}
+
+/**
+ * Load required knowledge for a datasource (from URL or file path)
+ * @param {string} source - URL or file path to load knowledge from
+ * @returns {Promise<string>} The knowledge content
+ */
+async function loadKnowledgeContent(source) {
+  // Check if it's a URL
+  if (source.startsWith('http://') || source.startsWith('https://')) {
+    try {
+      const response = await axios.get(source, {
+        timeout: HTTP_TIMEOUT_MS,
+        headers: {
+          'User-Agent': 'ethpandaops-data-mcp/0.4.0'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      throw new Error(`Failed to fetch knowledge from URL ${source}: ${error.message}`);
+    }
+  } else {
+    // It's a file path
+    try {
+      const content = await fs.readFile(source, 'utf8');
+      return content;
+    } catch (error) {
+      throw new Error(`Failed to read knowledge from file ${source}: ${error.message}`);
+    }
+  }
+}
+
 // Discover datasources from Grafana
 async function discoverDatasources() {
   try {
     console.error('Discovering datasources from Grafana...');
     const datasources = await grafanaGet('/datasources');
     DATASOURCE_DESCRIPTIONS = loadDescriptions();
+    DATASOURCE_REQUIRED_READING = loadRequiredReading();
     
     // Build datasource map
     const found = {};
@@ -678,6 +769,50 @@ function firstUidOfType(typeNorm) {
 const requireUidForType = (typeNorm, provided, dsMap = enabledDatasources) => baseRequireUidForType(typeNorm, provided, dsMap);
 
 const toolHandlers = {
+  // Load required knowledge for a datasource before querying
+  async load_knowledge({ datasource_uid }) {
+    if (!datasource_uid) {
+      throw new McpError(ErrorCode.InvalidParams, 'datasource_uid is required');
+    }
+
+    // Check if datasource exists
+    const datasource = enabledDatasources[datasource_uid];
+    if (!datasource) {
+      throw new McpError(
+        ErrorCode.InvalidParams,
+        `Unknown datasource_uid: ${datasource_uid}. Call list_datasources to see available datasources.`
+      );
+    }
+
+    // Check if required reading is configured for this datasource
+    const readingSource = DATASOURCE_REQUIRED_READING[datasource_uid];
+    if (!readingSource) {
+      return {
+        datasource_uid,
+        datasource_name: datasource.name,
+        required_reading: false,
+        message: 'No required reading configured for this datasource. You may query it directly.',
+      };
+    }
+
+    // Load the knowledge content
+    const content = await loadKnowledgeContent(readingSource);
+
+    // Mark this datasource as having loaded knowledge
+    loadedKnowledge.add(datasource_uid);
+
+    return {
+      datasource_uid,
+      datasource_name: datasource.name,
+      datasource_type: datasource.typeNormalized,
+      required_reading: true,
+      source: readingSource,
+      knowledge_loaded: true,
+      content,
+      message: `Knowledge loaded successfully. You may now query this datasource.`,
+    };
+  },
+
   // Health check tool to verify connection to Grafana
   async health_check() {
     try {
@@ -701,6 +836,17 @@ const toolHandlers = {
       const healthy = datasourceCount > 0;
       const status = datasourceCount === 0 ? 'warning' : 'healthy';
       
+      // Check required reading status
+      const datasourcesWithRequiredReading = Object.keys(DATASOURCE_REQUIRED_READING).filter(
+        uid => enabledDatasources[uid]
+      );
+      const requiredReadingStatus = datasourcesWithRequiredReading.map(uid => ({
+        uid,
+        name: enabledDatasources[uid]?.name,
+        source: DATASOURCE_REQUIRED_READING[uid],
+        loaded: loadedKnowledge.has(uid)
+      }));
+
       return {
         healthy: healthy,
         status: status,
@@ -711,20 +857,28 @@ const toolHandlers = {
         datasources: Object.values(enabledDatasources).map(ds => ({
           name: ds.name,
           type: ds.typeNormalized,
-          uid: ds.uid
+          uid: ds.uid,
+          requires_knowledge: !!DATASOURCE_REQUIRED_READING[ds.uid],
+          knowledge_loaded: loadedKnowledge.has(ds.uid)
         })),
+        required_reading: {
+          configured: datasourcesWithRequiredReading.length,
+          status: requiredReadingStatus
+        },
         catalog_entries: catalog.size,
         result_storage: {
           directory: RESULTS_DIR,
+          max_inline_size: formatBytes(MAX_INLINE_BYTES),
           max_resource_size: formatBytes(MAX_RESOURCE_BYTES),
         },
         features: [
-          'Tools NEVER return data inline - only schema and metadata',
+          'Inline query tools (*_query) return data directly up to 64KB',
+          'Resource query tools (*_query_to_resource) save to disk and return file_path/resource_uri',
           'Automatic JSON schema generation for all query results',
-          'All results saved to disk with resource URIs for access',
           'Resource templates with filtering (?limit, ?offset, ?jq)',
           'JQ expression filtering for complex queries',
-          'Consistent behavior prevents context flooding',
+          'Error-driven workflow guides you to the right tool',
+          'Knowledge loading enforcement for datasources with DATASOURCE_REQUIRED_READING',
         ],
         message: datasourceCount === 0
           ? 'Connected to Grafana but no datasources discovered. Check permissions or datasource configuration.'
@@ -750,8 +904,8 @@ const toolHandlers = {
     return { datasources: list };
   },
 
-  // Loki: support actions: query, labels, label_values
-  async loki_tool(args = {}) {
+  // Loki query - inline response
+  async loki_query(args = {}) {
     const {
       action = 'query',
       query,
@@ -763,6 +917,7 @@ const toolHandlers = {
     } = args;
 
     const datasourceUid = requireUidForType('loki', datasource_uid);
+    validateKnowledgeLoaded(datasourceUid);
     const startNs = parseTime(start);
     const endNs = parseTime(end);
 
@@ -781,19 +936,62 @@ const toolHandlers = {
       if (!label) throw new Error('label is required for action=label_values');
       rawResult = await datasourceGet(datasourceUid, `/loki/api/v1/label/${label}/values`, { start: startNs, end: endNs });
     } else {
-      throw new Error(`Unknown action for loki_tool: ${action}`);
+      throw new Error(`Unknown action for loki_query: ${action}`);
     }
 
-    return respondWithResult({
-      toolName: 'loki_tool',
+    return respondWithInline({
+      toolName: 'loki_query',
       args,
       datasourceUid,
       rawResult,
     });
   },
 
-  // Prometheus: instant or range query
-  async prometheus_tool(args = {}) {
+  // Loki query to resource - persists and returns resource URI
+  async loki_query_to_resource(args = {}) {
+    const {
+      action = 'query',
+      query,
+      start = 'now-1h',
+      end = 'now',
+      limit = 100,
+      label,
+      datasource_uid,
+    } = args;
+
+    const datasourceUid = requireUidForType('loki', datasource_uid);
+    validateKnowledgeLoaded(datasourceUid);
+    const startNs = parseTime(start);
+    const endNs = parseTime(end);
+
+    let rawResult;
+    if (action === 'query') {
+      if (!query) throw new Error('query is required for action=query');
+      rawResult = await datasourceGet(datasourceUid, '/loki/api/v1/query_range', {
+        query,
+        start: startNs,
+        end: endNs,
+        limit,
+      });
+    } else if (action === 'labels') {
+      rawResult = await datasourceGet(datasourceUid, '/loki/api/v1/labels', { start: startNs, end: endNs });
+    } else if (action === 'label_values') {
+      if (!label) throw new Error('label is required for action=label_values');
+      rawResult = await datasourceGet(datasourceUid, `/loki/api/v1/label/${label}/values`, { start: startNs, end: endNs });
+    } else {
+      throw new Error(`Unknown action for loki_query_to_resource: ${action}`);
+    }
+
+    return respondWithResult({
+      toolName: 'loki_query_to_resource',
+      args,
+      datasourceUid,
+      rawResult,
+    });
+  },
+
+  // Prometheus query - inline response
+  async prometheus_query(args = {}) {
     const {
       mode = 'instant',
       query,
@@ -805,6 +1003,7 @@ const toolHandlers = {
     } = args;
 
     const datasourceUid = requireUidForType('prometheus', datasource_uid);
+    validateKnowledgeLoaded(datasourceUid);
     if (!query) throw new Error('query is required');
 
     let rawResult;
@@ -817,22 +1016,129 @@ const toolHandlers = {
       const stepSec = parseDurationToSeconds(step);
       rawResult = await datasourceGet(datasourceUid, '/api/v1/query_range', { query, start: startSec, end: endSec, step: stepSec });
     } else {
-      throw new Error(`Unknown mode for prometheus_tool: ${mode}`);
+      throw new Error(`Unknown mode for prometheus_query: ${mode}`);
     }
 
-    return respondWithResult({
-      toolName: 'prometheus_tool',
+    return respondWithInline({
+      toolName: 'prometheus_query',
       args,
       datasourceUid,
       rawResult,
     });
   },
 
-  // ClickHouse: SQL via Grafana unified query API
-  // Note: Requires a ClickHouse datasource that supports raw SQL queries via Grafana query model.
-  async clickhouse_tool(args = {}) {
+  // Prometheus query to resource - persists and returns resource URI
+  async prometheus_query_to_resource(args = {}) {
+    const {
+      mode = 'instant',
+      query,
+      time = 'now',
+      start = 'now-1h',
+      end = 'now',
+      step = '30s',
+      datasource_uid,
+    } = args;
+
+    const datasourceUid = requireUidForType('prometheus', datasource_uid);
+    validateKnowledgeLoaded(datasourceUid);
+    if (!query) throw new Error('query is required');
+
+    let rawResult;
+    if (mode === 'instant') {
+      const t = time === 'now' ? Math.floor(Date.now() / 1000) : Math.floor(new Date(time).getTime() / 1000);
+      rawResult = await datasourceGet(datasourceUid, '/api/v1/query', { query, time: t });
+    } else if (mode === 'range') {
+      const startSec = Math.floor(parseTime(start) / 1e9);
+      const endSec = Math.floor(parseTime(end) / 1e9);
+      const stepSec = parseDurationToSeconds(step);
+      rawResult = await datasourceGet(datasourceUid, '/api/v1/query_range', { query, start: startSec, end: endSec, step: stepSec });
+    } else {
+      throw new Error(`Unknown mode for prometheus_query_to_resource: ${mode}`);
+    }
+
+    return respondWithResult({
+      toolName: 'prometheus_query_to_resource',
+      args,
+      datasourceUid,
+      rawResult,
+    });
+  },
+
+  // ClickHouse query - inline response
+  async clickhouse_query(args = {}) {
     const { sql, from = 'now-1h', to = 'now', datasource_uid } = args;
     const datasourceUid = requireUidForType('clickhouse', datasource_uid);
+    validateKnowledgeLoaded(datasourceUid);
+    if (!sql) throw new Error('sql is required');
+
+    const dangerousPatterns = [
+      ';--', '/*', '*/', 'xp_', 'sp_',
+      'exec(', 'execute(', 'eval(',
+      'drop table', 'drop database', 'truncate',
+      'insert into', 'update set', 'delete from'
+    ];
+
+    const sqlLower = sql.toLowerCase();
+    for (const pattern of dangerousPatterns) {
+      if (sqlLower.includes(pattern)) {
+        throw new Error(`SQL query contains potentially dangerous pattern: ${pattern}.`);
+      }
+    }
+
+    const fromMs = Math.floor(parseTime(from) / 1e6);
+    const toMs = Math.floor(parseTime(to) / 1e6);
+    const ds = enabledDatasources[datasourceUid];
+
+    let body;
+    if (ds.type === 'vertamedia-clickhouse-datasource') {
+      body = {
+        from: String(fromMs),
+        to: String(toMs),
+        queries: [
+          {
+            refId: 'A',
+            datasource: { uid: datasourceUid, type: ds.type },
+            query: sql,
+            format: 'table',
+            intervalMs: 1000,
+            maxDataPoints: 1000,
+          },
+        ],
+      };
+    } else {
+      body = {
+        from: String(fromMs),
+        to: String(toMs),
+        queries: [
+          {
+            refId: 'A',
+            datasource: { uid: datasourceUid, type: ds.type },
+            queryType: 'sql',
+            editorMode: 'code',
+            format: 1,
+            intervalMs: 1000,
+            maxDataPoints: 1000,
+            rawSql: sql,
+          },
+        ],
+      };
+    }
+
+    const rawResult = await grafanaDsQueryPost(body);
+
+    return respondWithInline({
+      toolName: 'clickhouse_query',
+      args,
+      datasourceUid,
+      rawResult,
+    });
+  },
+
+  // ClickHouse query to resource - persists and returns resource URI
+  async clickhouse_query_to_resource(args = {}) {
+    const { sql, from = 'now-1h', to = 'now', datasource_uid } = args;
+    const datasourceUid = requireUidForType('clickhouse', datasource_uid);
+    validateKnowledgeLoaded(datasourceUid);
     if (!sql) throw new Error('sql is required');
 
     const dangerousPatterns = [
@@ -891,7 +1197,7 @@ const toolHandlers = {
     const rawResult = await grafanaDsQueryPost(body);
 
     return respondWithResult({
-      toolName: 'clickhouse_tool',
+      toolName: 'clickhouse_query_to_resource',
       args,
       datasourceUid,
       rawResult,
@@ -1085,8 +1391,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
     },
     {
-      name: 'loki_tool',
-      description: 'Interact with Loki: actions=query|labels|label_values. Responses return result_id/resource_uri and file_path for saved data.',
+      name: 'load_knowledge',
+      description: 'Load required knowledge/documentation for a datasource before querying. Some datasources require you to read documentation or schema information before they can be queried. This tool fetches that knowledge from a URL or file path. IMPORTANT: You must call this tool for any datasource that has required_reading configured before you can query it.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          datasource_uid: { type: 'string', description: 'Datasource UID to load knowledge for' },
+        },
+        required: ['datasource_uid'],
+      },
+    },
+    {
+      name: 'loki_query',
+      description: 'Query Loki logs with inline response (max 64KB). Use this for quick iteration and small result sets. If result exceeds 64KB, error message directs you to use loki_query_to_resource instead. Actions: query|labels|label_values. Time filtering is handled via start/end parameters - Loki queries do not need Grafana time macros.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -1101,13 +1418,29 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
     },
     {
-      name: 'prometheus_tool',
-      description: 'Query Prometheus: mode=instant|range. Responses return result_id/resource_uri and file_path for saved data.',
+      name: 'loki_query_to_resource',
+      description: 'Query Loki logs and persist result to disk. Returns result_id, resource_uri, and file_path. Use this for large datasets (>64KB) or when you need to filter with ?limit, ?offset, or ?jq parameters via resources/read. Time filtering is handled via start/end parameters - Loki queries do not need Grafana time macros.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['query', 'labels', 'label_values'], description: 'Loki action' },
+          query: { type: 'string', description: 'LogQL query string (for action=query)' },
+          start: { type: 'string', description: 'Start time (e.g., "now-1h", RFC3339)' },
+          end: { type: 'string', description: 'End time (e.g., "now", RFC3339)' },
+          limit: { type: 'integer', description: 'Max log lines to return (default: 100)' },
+          label: { type: 'string', description: 'Label name (for action=label_values)' },
+          datasource_uid: { type: 'string', description: 'Datasource UID (required if multiple Loki datasources)' },
+        },
+      },
+    },
+    {
+      name: 'prometheus_query',
+      description: 'Query Prometheus metrics with inline response (max 64KB). Use this for quick iteration and small result sets. If result exceeds 64KB, error message directs you to use prometheus_query_to_resource instead. Modes: instant|range. IMPORTANT: You can use Grafana macros in your PromQL queries - $__interval (e.g., rate(metric[$__interval])), $__rate_interval (recommended for rate/increase), $__range, $__range_s, $__range_ms. These are automatically expanded by Grafana.',
       inputSchema: {
         type: 'object',
         properties: {
           mode: { type: 'string', enum: ['instant', 'range'], description: 'Query mode' },
-          query: { type: 'string', description: 'PromQL query string' },
+          query: { type: 'string', description: 'PromQL query string. Can use Grafana macros: $__interval, $__rate_interval, $__range' },
           time: { type: 'string', description: 'Instant timestamp (RFC3339 or "now")' },
           start: { type: 'string', description: 'Range start (e.g., "now-1h")' },
           end: { type: 'string', description: 'Range end (e.g., "now")' },
@@ -1118,12 +1451,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
     },
     {
-      name: 'clickhouse_tool',
-      description: 'Run SQL against ClickHouse via Grafana. Responses return result_id/resource_uri and file_path for saved data.',
+      name: 'prometheus_query_to_resource',
+      description: 'Query Prometheus metrics and persist result to disk. Returns result_id, resource_uri, and file_path. Use this for large datasets (>64KB) or when you need to filter with ?limit, ?offset, or ?jq parameters via resources/read. IMPORTANT: You can use Grafana macros in your PromQL queries - $__interval (e.g., rate(metric[$__interval])), $__rate_interval (recommended for rate/increase), $__range, $__range_s, $__range_ms. These are automatically expanded by Grafana.',
       inputSchema: {
         type: 'object',
         properties: {
-          sql: { type: 'string', description: 'SQL query to execute' },
+          mode: { type: 'string', enum: ['instant', 'range'], description: 'Query mode' },
+          query: { type: 'string', description: 'PromQL query string. Can use Grafana macros: $__interval, $__rate_interval, $__range' },
+          time: { type: 'string', description: 'Instant timestamp (RFC3339 or "now")' },
+          start: { type: 'string', description: 'Range start (e.g., "now-1h")' },
+          end: { type: 'string', description: 'Range end (e.g., "now")' },
+          step: { type: 'string', description: 'Range step (e.g., "30s")' },
+          datasource_uid: { type: 'string', description: 'Datasource UID (required if multiple Prometheus datasources)' },
+        },
+        required: ['query'],
+      },
+    },
+    {
+      name: 'clickhouse_query',
+      description: 'Run SQL query against ClickHouse with inline response (max 64KB). Use this for quick iteration and small result sets. If result exceeds 64KB, error message directs you to use clickhouse_query_to_resource instead. IMPORTANT: You can use Grafana macros in your SQL - $__timeFilter(column) for WHERE clauses, $__fromTime/$__toTime for time bounds, $__interval_s for grouping intervals, $__timeInterval(column) for GROUP BY. These are automatically expanded by Grafana.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sql: { type: 'string', description: 'SQL query to execute. Can use Grafana macros: $__timeFilter(column), $__fromTime, $__toTime, $__interval_s, $__timeInterval(column)' },
+          from: { type: 'string', description: 'Time range start (e.g., "now-1h")' },
+          to: { type: 'string', description: 'Time range end (e.g., "now")' },
+          datasource_uid: { type: 'string', description: 'Datasource UID (required if multiple ClickHouse datasources)' },
+        },
+        required: ['sql'],
+      },
+    },
+    {
+      name: 'clickhouse_query_to_resource',
+      description: 'Run SQL query against ClickHouse and persist result to disk. Returns result_id, resource_uri, and file_path. Use this for large datasets (>64KB) or when you need to filter with ?limit, ?offset, or ?jq parameters via resources/read. IMPORTANT: You can use Grafana macros in your SQL - $__timeFilter(column) for WHERE clauses, $__fromTime/$__toTime for time bounds, $__interval_s for grouping intervals, $__timeInterval(column) for GROUP BY. These are automatically expanded by Grafana.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sql: { type: 'string', description: 'SQL query to execute. Can use Grafana macros: $__timeFilter(column), $__fromTime, $__toTime, $__interval_s, $__timeInterval(column)' },
           from: { type: 'string', description: 'Time range start (e.g., "now-1h")' },
           to: { type: 'string', description: 'Time range end (e.g., "now")' },
           datasource_uid: { type: 'string', description: 'Datasource UID (required if multiple ClickHouse datasources)' },

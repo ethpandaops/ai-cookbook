@@ -1,6 +1,6 @@
 {
   "name": "@ethpandaops/ethpandaops-data",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "MCP server for interacting with ethpandaops internal data",
   "main": "index.js",
   "type": "module",
