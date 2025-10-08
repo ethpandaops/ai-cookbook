@@ -85,7 +85,6 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
 - `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
 - `GRAFANA_RESULT_DIR` (optional): Directory for persisted query results (default: `/tmp/ai-cookbook-grafana`).
-- `GRAFANA_MAX_PREVIEW_BYTES` (optional): Maximum bytes returned by `fetch_result` previews (default: `4096`).
 - `GRAFANA_MAX_RESOURCE_BYTES` (optional): Maximum bytes readable via `resources/read` (default: `5242880`).
 - `GRAFANA_RESULT_TTL_HOURS` (optional): Automatically delete stored results older than this many hours (default: disabled).
 - `GRAFANA_CATALOG_LOCK_TIMEOUT_MS` (optional): Milliseconds to wait when acquiring the catalog lock (default: `5000`).
@@ -127,12 +126,15 @@ To enable only specific datasources by their UID:
 
 ## Result Storage & Visualization Workflow
 
-All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and return a `result_id`, `resource_uri`, and absolute `file_path` for downstream use:
+All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and return schema + metadata (never inline data):
 
-1. Run `clickhouse_tool`, `prometheus_tool`, or `loki_tool`. Keep the returned `result_id` and `file_path`.
-2. Point visualization MCPs (or any other tooling) at `file_path` to load the dataset directly without routing the bytes through the conversation.
-3. When you only need a quick glance, call `fetch_result` (small preview capped by `GRAFANA_MAX_PREVIEW_BYTES`) or `resources/read` if the artifact is small enough.
-4. Clean up with `delete_result` or `trim_results`, or enable `GRAFANA_RESULT_TTL_HOURS` for automatic pruning.
+1. Run `clickhouse_tool`, `prometheus_tool`, or `loki_tool` to get `result_id`, `resource_uri`, and JSON schema.
+2. Access data via `resources/read` with the `resource_uri`:
+   - Add `?limit=N&offset=M` for pagination
+   - Add `?jq=EXPRESSION` for filtering (e.g., `?jq=.data.result[]|select(.metric.job=="prometheus")`)
+3. Optional: Call `describe_result` with `result_id` to get detailed schema and usage examples.
+4. For visualization tools, use `file_path` from `describe_result` to load data directly.
+5. Clean up with `delete_result` or `trim_results`, or enable `GRAFANA_RESULT_TTL_HOURS` for automatic pruning.
 
 > Note: catalog mutations are guarded by a simple filesystem lock (`catalog.lock`) so multiple Grafana MCP instances can share the same result directory safely.
 
@@ -162,9 +164,6 @@ All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and
 
 - `describe_result`
   - Return metadata for a specific `result_id` (resource URI, summary, sizes).
-
-- `fetch_result`
-  - Retrieve a capped inline preview (`preview_text`) or call `resources/read` with the `resource_uri` for the full payload when within limits.
 
 - `delete_result`
   - Remove a stored result and optionally delete its cached artifact.

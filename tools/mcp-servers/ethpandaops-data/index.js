@@ -42,7 +42,6 @@ function parseEnvInt(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const MAX_PREVIEW_BYTES = parseEnvInt('GRAFANA_MAX_PREVIEW_BYTES', 4096);
 const MAX_RESOURCE_BYTES = parseEnvInt('GRAFANA_MAX_RESOURCE_BYTES', 5 * 1024 * 1024);
 const RESULT_TTL_HOURS = parseEnvInt('GRAFANA_RESULT_TTL_HOURS', 0); // 0 disables TTL pruning
 
@@ -483,17 +482,6 @@ function getCatalogEntryOrThrow(resultId) {
   return entry;
 }
 
-async function readResultFile(entry, maxBytes) {
-  const data = await fs.readFile(entry.file_path, 'utf8');
-  if (typeof maxBytes === 'number' && maxBytes > 0 && Buffer.byteLength(data, 'utf8') > maxBytes) {
-    return {
-      truncated: true,
-      content: data.slice(0, maxBytes),
-    };
-  }
-  return { truncated: false, content: data };
-}
-
 async function pruneCatalog({ skipNotification = false } = {}) {
   const { result: plan, changed } = await withCatalogWriteLock(async () => {
     const removalPlan = [];
@@ -719,7 +707,6 @@ const toolHandlers = {
         result_storage: {
           directory: RESULTS_DIR,
           max_resource_size: formatBytes(MAX_RESOURCE_BYTES),
-          max_preview_size: formatBytes(MAX_PREVIEW_BYTES),
         },
         features: [
           'Tools NEVER return data inline - only schema and metadata',
@@ -964,38 +951,6 @@ const toolHandlers = {
     };
   },
 
-  async fetch_result({ result_id, max_bytes = MAX_PREVIEW_BYTES }) {
-    if (!result_id) {
-      throw new McpError(ErrorCode.InvalidParams, 'result_id is required');
-    }
-    await ensureStorage();
-    await loadCatalogFromDisk();
-    const entry = getCatalogEntryOrThrow(result_id);
-    const maxBytes = max_bytes ? Number(max_bytes) : 0;
-    const sliceLimit = Number.isFinite(maxBytes) && maxBytes > 0 ? Math.min(maxBytes, MAX_PREVIEW_BYTES) : MAX_PREVIEW_BYTES;
-    const { truncated, content } = await readResultFile(entry, sliceLimit);
-    let parsed;
-    if (!truncated && entry.format === 'json') {
-      try {
-        parsed = JSON.parse(content);
-      } catch (error) {
-        parsed = undefined;
-      }
-    }
-    return {
-      result_id,
-      truncated,
-      slice_bytes: Buffer.byteLength(content, 'utf8'),
-      size_bytes: entry.size_bytes,
-      format: entry.format,
-      resource_uri: resultIdToUri(entry.id),
-      file_path: entry.file_path,
-      summary: entry.summary,
-      preview_text: content,
-      preview_json: parsed,
-    };
-  },
-
   async delete_result({ result_id, delete_file = true }) {
     if (!result_id) {
       throw new McpError(ErrorCode.InvalidParams, 'result_id is required');
@@ -1173,18 +1128,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         type: 'object',
         properties: {
           result_id: { type: 'string', description: 'Identifier returned from a data tool response' },
-        },
-        required: ['result_id'],
-      },
-    },
-    {
-      name: 'fetch_result',
-      description: 'Fetch a capped inline preview or call resources/read with resource_uri for full payloads.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          result_id: { type: 'string', description: 'Identifier returned from a data tool response' },
-          max_bytes: { type: 'integer', description: 'Maximum number of bytes to preview (capped by GRAFANA_MAX_PREVIEW_BYTES, default: 4096)' },
         },
         required: ['result_id'],
       },
