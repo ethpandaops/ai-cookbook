@@ -10,7 +10,7 @@
         "GRAFANA_URL": "https://grafana.primary.production.platform.ethpandaops.io",
         "DATASOURCE_UIDS": "",
         "DATASOURCE_DESCRIPTIONS": "{}",
-        "HTTP_TIMEOUT_MS": "15000"
+        "HTTP_TIMEOUT_MS": "30000"
       }
     }
   }

@@ -67,7 +67,7 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
         "GRAFANA_URL": "https://grafana.primary.production.platform.ethpandaops.io",
         "DATASOURCE_UIDS": "", // optional: comma-separated UIDs to include
         "DATASOURCE_DESCRIPTIONS": "{\"P8E80F9AEF21F6940\":\"Loki logs for Ethereum services\"}",
-        "HTTP_TIMEOUT_MS": "15000"
+        "HTTP_TIMEOUT_MS": "30000"
       }
     }
   }
@@ -83,7 +83,7 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 - `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
-- `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
+- `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 30000).
 - `GRAFANA_RESULT_DIR` (optional): Directory for persisted query results (default: `/tmp/ai-cookbook-grafana`).
 - `GRAFANA_MAX_RESOURCE_BYTES` (optional): Maximum bytes readable via `resources/read` (default: `5242880`).
 - `GRAFANA_RESULT_TTL_HOURS` (optional): Automatically delete stored results older than this many hours (default: disabled).

@@ -27,7 +27,7 @@ const DATASOURCE_CONFIG = process.env.DATASOURCE_UIDS
   ? process.env.DATASOURCE_UIDS.split(',').map((s) => s.trim()).filter(Boolean)
   : [];
 const DESCRIPTIONS_JSON = process.env.DATASOURCE_DESCRIPTIONS || '';
-const HTTP_TIMEOUT_MS = process.env.HTTP_TIMEOUT_MS ? parseInt(process.env.HTTP_TIMEOUT_MS) : 15000;
+const HTTP_TIMEOUT_MS = process.env.HTTP_TIMEOUT_MS ? parseInt(process.env.HTTP_TIMEOUT_MS) : 30000;
 
 const STORAGE_ROOT = process.env.GRAFANA_RESULT_DIR || path.join(os.tmpdir(), 'ai-cookbook-grafana');
 const RESULTS_DIR = path.join(STORAGE_ROOT, 'results');
@@ -358,6 +358,16 @@ async function notifyResourceListChanged() {
   }
 }
 
+/**
+ * Generates a short random ID (10 chars, base36)
+ */
+function generateShortId() {
+  // Generate 8 random bytes and convert to base36
+  const randomBytes = crypto.randomBytes(8);
+  const randomNum = randomBytes.readBigUInt64BE(0);
+  return randomNum.toString(36).slice(0, 10).padStart(10, '0');
+}
+
 async function persistResultEntry({
   toolName,
   datasourceUid,
@@ -368,7 +378,7 @@ async function persistResultEntry({
 }) {
   await ensureStorage();
 
-  const id = `${Date.now()}-${crypto.randomUUID()}`;
+  const id = generateShortId();
   const fileName = `${id}.${RESULT_FILE_EXTENSION}`;
   const filePath = path.join(RESULTS_DIR, fileName);
 
@@ -1278,8 +1288,8 @@ server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
     data.data.result = data.data.result.slice(start, end);
   }
 
-  // Serialize filtered data
-  const filteredData = JSON.stringify(data, null, 2);
+  // Serialize filtered data (compact format - no pretty-printing)
+  const filteredData = JSON.stringify(data);
   const filteredSize = Buffer.byteLength(filteredData, 'utf8');
 
   // Check if filtered result still exceeds limits
