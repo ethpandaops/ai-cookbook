@@ -1,0 +1,10 @@
+{
+  "name": "cargo-check",
+  "description": "Run cargo check to verify Rust code compiles without errors",
+  "hook_type": "PostToolUse",
+  "matcher": "Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool",
+  "requirements": {
+    "commands": ["cargo"],
+    "description": "Requires Rust toolchain with cargo installed"
+  }
+}

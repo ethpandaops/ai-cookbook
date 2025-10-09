@@ -1,0 +1,10 @@
+{
+  "name": "clippy",
+  "description": "Run Rust clippy linter after editing Rust files to catch common mistakes",
+  "hook_type": "PostToolUse",
+  "matcher": "Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool",
+  "requirements": {
+    "commands": ["cargo"],
+    "description": "Requires Rust toolchain with clippy installed (rustup component add clippy)"
+  }
+}
