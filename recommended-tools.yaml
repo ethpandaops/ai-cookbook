@@ -25,9 +25,6 @@ hooks:
   - golangci-lint
   - typescript
   - always-ultrathink
-  - rustfmt
-  - clippy
-  - cargo-check
 
 # Claude Code agents for specialized AI assistance
 agents: []
@@ -37,4 +34,3 @@ mcp_servers: []
 
 # Utility scripts for project management and automation (installed as a group)
 scripts: []
-
