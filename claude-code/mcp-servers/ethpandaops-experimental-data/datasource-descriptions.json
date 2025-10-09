@@ -1,0 +1,3 @@
+{
+  "P7C0E9263B64B2A80": "Clickhouse database. Runs in a sharded, replicated cluster. Contains mostly Xatu data. You MUST fetch the contents of https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms.txt when working with Xatu data. You MUST ALWAYS filter by the partition key of the table when querying otherwise you will scan the entire table. Fetch the CREATE TABLE statement from https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/schema/clickhouse/$DATABASE/$TABLE.sql. Since this cluster is running distributed you MUST use CTEs and other forms of querying that work with a sharded, distributed cluster. AVOID GLOBAL JOINS AT ALL COSTS. "
+}

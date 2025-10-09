@@ -1,0 +1,21 @@
+{
+  "name": "ethpandaops-experimental-xatu-data",
+  "description": "Access ethPandaOps xatu experimental Grafana datasources (ClickHouse). Contains Xatu data for networks that contain the word `devnet` in the name.",
+  "implementation": "tools/mcp-servers/ethpandaops-data",
+  "entry_point": "index.js",
+  "version": "1.0.0",
+  "config_prompts": {
+    "grafana_url": {
+      "prompt": "Grafana URL",
+      "default": "https://grafana.xatu-experimental.ethpandaops.io",
+      "description": "URL to your Grafana instance"
+    },
+    "service_token": {
+      "prompt": "Grafana service token (glsa_...)",
+      "required": true,
+      "secret": true,
+      "description": "Service token for Grafana authentication",
+      "help_url": "https://grafana.xatu-experimental.ethpandaops.io/org/serviceaccounts"
+    }
+  }
+}

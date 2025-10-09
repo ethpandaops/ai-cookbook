@@ -366,6 +366,17 @@ class MCPServersInstaller(InteractiveInstaller):
                             print(f"📚 Loaded {len(descriptions)} datasource descriptions")
                     except Exception as e:
                         print(f"⚠️  Could not load datasource descriptions: {e}")
+
+                # Look for datasource required reading configuration
+                required_reading_file = server_config_dir / "datasource-required-reading.json"
+                if required_reading_file.exists():
+                    try:
+                        with open(required_reading_file, 'r') as f:
+                            required_reading = json.load(f)
+                            env_vars['datasource_required_reading'] = json.dumps(required_reading)
+                            print(f"📖 Loaded required reading configuration for {len(required_reading)} datasource(s)")
+                    except Exception as e:
+                        print(f"⚠️  Could not load datasource required reading: {e}")
                     
             # Handle binary runtime servers
             if server_config_data.get('runtime') == 'binary':
@@ -397,6 +408,8 @@ class MCPServersInstaller(InteractiveInstaller):
                 test_env['GRAFANA_SERVICE_TOKEN'] = env_vars.get('service_token', '')
                 if 'datasource_descriptions' in env_vars:
                     test_env['DATASOURCE_DESCRIPTIONS'] = env_vars['datasource_descriptions']
+                if 'datasource_required_reading' in env_vars:
+                    test_env['DATASOURCE_REQUIRED_READING'] = env_vars['datasource_required_reading']
                 
                 # Create a test script to run the health check
                 test_script = """
@@ -455,6 +468,8 @@ http.get('/api/user').then(r => {
                     server_config['env']['GRAFANA_SERVICE_TOKEN'] = value
                 elif key == 'datasource_descriptions':
                     server_config['env']['DATASOURCE_DESCRIPTIONS'] = value
+                elif key == 'datasource_required_reading':
+                    server_config['env']['DATASOURCE_REQUIRED_READING'] = value
                 else:
                     # Generic env var mapping
                     server_config['env'][key.upper()] = value

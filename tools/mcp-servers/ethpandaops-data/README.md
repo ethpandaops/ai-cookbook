@@ -12,6 +12,8 @@ A minimal MCP (Model Context Protocol) server that provides access to ethPandaOp
 - **Token management** - Configure which environment variable contains your Grafana token
 - **Multi-datasource support** - Pass `datasource_uid` when there are multiple of a type
 - **ai-cookbook integration** - Automated installation and configuration via ai-cookbook
+- **Result persistence** - Default to saving large query outputs under `/tmp/ai-cookbook-grafana` with catalog metadata and resource URIs
+- **Visualization-ready workflow** - Built-in helper tools explain how to feed saved datasets into Vega-Lite or VChart MCP servers
 
 ## Installation
 
@@ -65,7 +67,7 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
         "GRAFANA_URL": "https://grafana.primary.production.platform.ethpandaops.io",
         "DATASOURCE_UIDS": "", // optional: comma-separated UIDs to include
         "DATASOURCE_DESCRIPTIONS": "{\"P8E80F9AEF21F6940\":\"Loki logs for Ethereum services\"}",
-        "HTTP_TIMEOUT_MS": "15000"
+        "HTTP_TIMEOUT_MS": "30000"
       }
     }
   }
@@ -81,7 +83,14 @@ export ETHPANDAOPS_PLATFORM_PRODUCTION_GRAFANA_SERVICE_TOKEN="your-service-token
 - `GRAFANA_URL` (optional): Grafana API URL (default: `https://grafana.primary.production.platform.ethpandaops.io`).
 - `DATASOURCE_UIDS` (optional): Comma-separated datasource UIDs to enable. If absent, all discovered Loki/Prometheus/ClickHouse datasources are enabled.
 - `DATASOURCE_DESCRIPTIONS` (optional): JSON map `{ "uid": "description" }` to help LLMs choose datasources.
-- `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 15000).
+- `DATASOURCE_REQUIRED_READING` (optional): JSON map `{ "uid": "url_or_path" }` to enforce knowledge loading before querying specific datasources. When configured, the LLM must call `load_knowledge` with the datasource UID before it can query that datasource.
+- `HTTP_TIMEOUT_MS` (optional): Timeout for Grafana HTTP calls (default: 30000).
+- `GRAFANA_RESULT_DIR` (optional): Directory for persisted query results (default: `/tmp/ai-cookbook-grafana`).
+- `GRAFANA_MAX_RESOURCE_BYTES` (optional): Maximum bytes readable via `resources/read` (default: `5242880`).
+- `GRAFANA_RESULT_TTL_HOURS` (optional): Automatically delete stored results older than this many hours (default: disabled).
+- `GRAFANA_CATALOG_LOCK_TIMEOUT_MS` (optional): Milliseconds to wait when acquiring the catalog lock (default: `5000`).
+- `GRAFANA_CATALOG_LOCK_POLL_MS` (optional): Backoff duration between lock attempts (default: `50`).
+- `GRAFANA_CATALOG_LOCK_STALE_MS` (optional): Consider the lock stale and reclaim it after this many milliseconds (default: `60000`).
 
 Token configuration: Either set `GRAFANA_SERVICE_TOKEN` directly, or use `GRAFANA_SERVICE_TOKEN_ENV_VAR` to specify which environment variable contains your token.
 
@@ -116,32 +125,109 @@ To enable only specific datasources by their UID:
 }
 ```
 
+## Knowledge Loading
+
+For datasources that require specific schema or documentation knowledge, you can configure required reading via the `DATASOURCE_REQUIRED_READING` environment variable. When configured, the LLM **must** call the `load_knowledge` tool before it can query that datasource.
+
+### Configuration
+
+Add required reading URLs or file paths to your MCP server configuration:
+
+```json
+{
+  "mcpServers": {
+    "ethpandaops-production-data": {
+      "env": {
+        "DATASOURCE_REQUIRED_READING": "{\"PDE22E36FB877C574\": \"https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms/clickhouse/llms.txt\"}"
+      }
+    }
+  }
+}
+```
+
+Or use a local file in `claude-code/mcp-servers/<server-name>/datasource-required-reading.json`:
+
+```json
+{
+  "PDE22E36FB877C574": "https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms/clickhouse/llms.txt"
+}
+```
+
+The installer will automatically load this file if present.
+
+### Workflow
+
+1. Call `health_check` to see which datasources require knowledge loading
+2. For datasources with `requires_knowledge: true`, call `load_knowledge({ datasource_uid: "..." })`
+3. The tool fetches the documentation and returns it to the LLM
+4. Now you can query that datasource using the normal query tools
+
+### Error Handling
+
+If you try to query a datasource that requires knowledge loading without calling `load_knowledge` first, you'll get an error like:
+
+```
+Knowledge loading required for datasource PDE22E36FB877C574.
+
+You must call the load_knowledge tool with datasource_uid="PDE22E36FB877C574" before querying this datasource.
+This datasource requires you to read: https://raw.githubusercontent.com/ethpandaops/xatu-data/refs/heads/master/llms/clickhouse/llms.txt
+
+Example: load_knowledge({ datasource_uid: "PDE22E36FB877C574" })
+```
+
+## Result Storage & Visualization Workflow
+
+All data tools persist their output under `/tmp/ai-cookbook-grafana/results` and return schema + metadata (never inline data):
+
+1. Run `clickhouse_tool`, `prometheus_tool`, or `loki_tool` to get `result_id`, `resource_uri`, and JSON schema.
+2. Access data via `resources/read` with the `resource_uri`:
+   - Add `?limit=N&offset=M` for pagination
+   - Add `?jq=EXPRESSION` for filtering (e.g., `?jq=.data.result[]|select(.metric.job=="prometheus")`)
+3. Optional: Call `describe_result` with `result_id` to get detailed schema and usage examples.
+4. For visualization tools, use `file_path` from `describe_result` to load data directly.
+5. Clean up with `delete_result` or `trim_results`, or enable `GRAFANA_RESULT_TTL_HOURS` for automatic pruning.
+
+> Note: catalog mutations are guarded by a simple filesystem lock (`catalog.lock`) so multiple Grafana MCP instances can share the same result directory safely.
+
 ## Available Tools
 
 ### Tools
 
 - `health_check`
-  - Verify connection to Grafana and check authentication status.
-  - Returns: `healthy` (boolean), `grafana_url`, `authenticated`, `user`, `datasources_discovered`, error messages and help.
-  - No parameters required.
+  - Verify connectivity, authentication, storage configuration, and catalog size.
+  - Returns Grafana user info, discovered datasources, result storage defaults, required reading status, and preview limits.
 
 - `list_datasources`
-  - List all discovered datasources (UID, name, type, description).
-  - Params: `type` (optional: `loki` | `prometheus` | `clickhouse`).
+  - List discovered datasources (UID, name, type, description) with optional type filter.
+  - Params: `type` (`loki` | `prometheus` | `clickhouse`).
+
+- `load_knowledge`
+  - Load required documentation/schema information for a datasource before querying.
+  - Some datasources (configured via `DATASOURCE_REQUIRED_READING`) require knowledge to be loaded before they can be queried.
+  - This tool fetches the documentation from a URL or file path and marks the datasource as ready for querying.
+  - Params: `datasource_uid` (required)
+  - Returns: The knowledge content and confirmation that the datasource can now be queried.
 
 - `loki_tool`
-  - Actions: `query`, `labels`, `label_values`.
-  - Common params: `start` (default: `now-1h`), `end` (default: `now`), `datasource_uid` (required if multiple Loki datasources).
-  - For `query`: `query` (LogQL), `limit` (default: 100).
-  - For `label_values`: `label`.
+  - Interact with Loki (`query`, `labels`, `label_values`).
+  - Stores results to disk and returns metadata (`result_id`, `file_path`, `resource_uri`).
 
 - `prometheus_tool`
-  - Modes: `instant` or `range`.
-  - Params: `query` (PromQL), `mode`, `time` (instant), `start`, `end`, `step` (range), `datasource_uid`.
+  - Run instant or range PromQL queries.
+  - Stores results to disk and returns metadata (`result_id`, `file_path`, `resource_uri`).
 
 - `clickhouse_tool`
-  - Params: `sql` (required), `from` (default: `now-1h`), `to` (default: `now`), `datasource_uid`.
-  - Uses Grafana’s unified data query API; requires a ClickHouse datasource that supports raw SQL in Grafana.
+  - Execute raw SQL through Grafana’s unified data query API.
+  - Stores results to disk and returns metadata (`result_id`, `file_path`, `resource_uri`).
+
+- `describe_result`
+  - Return metadata for a specific `result_id` (resource URI, summary, sizes).
+
+- `delete_result`
+  - Remove a stored result and optionally delete its cached artifact.
+
+- `trim_results`
+  - Bulk-prune saved results by age (`max_age_hours`) or by keeping only the most recent (`max_results`).
 
 ## Adding New Datasource Types
 
