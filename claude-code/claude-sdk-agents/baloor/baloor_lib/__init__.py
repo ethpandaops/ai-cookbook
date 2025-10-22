@@ -26,6 +26,12 @@ from .utils import (
     normalize_hex,
     shorten_hex,
     decode_client_from_extra_data,
+    rpc_call,
+    fetch_bad_blocks_from_besu,
+    fetch_block_by_number,
+    fetch_block_by_hash,
+    fetch_transaction_receipt,
+    debug_trace_transaction,
 )
 
 # Import comparison functions
@@ -79,6 +85,12 @@ __all__ = [
     "normalize_hex",
     "shorten_hex",
     "decode_client_from_extra_data",
+    "rpc_call",
+    "fetch_bad_blocks_from_besu",
+    "fetch_block_by_number",
+    "fetch_block_by_hash",
+    "fetch_transaction_receipt",
+    "debug_trace_transaction",
     # Comparisons
     "compare_storage_changes",
     "compare_reads",

@@ -23,6 +23,7 @@ from .shared_context import (
     ImplementationPane,
     OperationSequence,
 )
+from .bal_root_cause_agent import BALRootCauseAnalyzer, analyze_bal_report
 
 __all__ = [
     "run_multi_agent_analysis",
@@ -32,4 +33,6 @@ __all__ = [
     "JournalInvariant",
     "ImplementationPane",
     "OperationSequence",
+    "BALRootCauseAnalyzer",
+    "analyze_bal_report",
 ]
