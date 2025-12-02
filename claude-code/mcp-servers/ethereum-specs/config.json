@@ -1,9 +1,9 @@
 {
   "name": "ethereum-specs",
-  "description": "Access Ethereum consensus specifications for all forks (phase0, altair, bellatrix, capella, deneb, electra, fulu)",
+  "description": "Access Ethereum specifications for consensus layer (phase0-fulu) and execution layer (Engine API, JSON-RPC methods)",
   "implementation": "tools/mcp-servers/ethereum-specs",
   "entry_point": "bin/ethereum-specs-mcp",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "runtime": "binary",
   "build_command": "make build",
   "config_prompts": {
@@ -16,6 +16,11 @@
       "prompt": "Specs branch to track",
       "default": "master",
       "description": "Branch of ethereum/consensus-specs to use (dev, master, etc)"
+    },
+    "execution_apis_branch": {
+      "prompt": "Execution APIs branch to track",
+      "default": "main",
+      "description": "Branch of ethereum/execution-apis to use"
     }
   }
 }
