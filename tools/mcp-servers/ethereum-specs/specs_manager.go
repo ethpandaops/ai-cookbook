@@ -1,5 +1,6 @@
 // Package main contains the specs repository management and tool implementations
-// for the Ethereum Consensus Specs MCP server.
+// for the Ethereum Specs MCP server. This file handles consensus layer specifications
+// from the ethereum/consensus-specs repository.
 package main
 
 import (
@@ -22,9 +23,18 @@ import (
 // These correspond to directories in the ethereum/consensus-specs repository.
 var availableForks = []string{"phase0", "altair", "bellatrix", "capella", "deneb", "electra", "fulu"}
 
-// SpecsManager handles all interactions with the Ethereum consensus specifications repository.
-// It manages git operations, caching, and provides methods to query specification content.
-type SpecsManager struct {
+// SpecsManager is an alias for ConsensusSpecsManager for backwards compatibility.
+type SpecsManager = ConsensusSpecsManager
+
+// NewSpecsManager is an alias for NewConsensusSpecsManager for backwards compatibility.
+func NewSpecsManager(log logrus.FieldLogger, branch string) *ConsensusSpecsManager {
+	return NewConsensusSpecsManager(log, branch)
+}
+
+// ConsensusSpecsManager handles all interactions with the Ethereum consensus specifications
+// repository. It manages git operations, caching, and provides methods to query specification
+// content from ethereum/consensus-specs.
+type ConsensusSpecsManager struct {
 	log         logrus.FieldLogger
 	branch      string            // Git branch to track (e.g., "master", "dev")
 	repoPath    string            // Local path to the cloned repository
@@ -33,9 +43,9 @@ type SpecsManager struct {
 	initialized bool              // Tracks whether initialization has completed
 }
 
-// NewSpecsManager creates a new instance of the specs manager.
+// NewConsensusSpecsManager creates a new instance of the consensus specs manager.
 // The repository will be cloned locally to keep everything self-contained.
-func NewSpecsManager(log logrus.FieldLogger, branch string) *SpecsManager {
+func NewConsensusSpecsManager(log logrus.FieldLogger, branch string) *ConsensusSpecsManager {
 	// Get the actual binary path (resolving any symlinks)
 	execPath, err := os.Executable()
 	if err != nil {
@@ -56,8 +66,8 @@ func NewSpecsManager(log logrus.FieldLogger, branch string) *SpecsManager {
 	repoPath := filepath.Join(baseDir, ".consensus-specs")
 	log.WithField("repo_path", repoPath).Info("Using repository path")
 
-	return &SpecsManager{
-		log:      log.WithField("component", "specs_manager"),
+	return &ConsensusSpecsManager{
+		log:      log.WithField("component", "consensus_specs_manager"),
 		branch:   branch,
 		repoPath: repoPath,
 		cache:    make(map[string]string, 100), // Pre-allocate for ~100 cached specs
@@ -66,14 +76,14 @@ func NewSpecsManager(log logrus.FieldLogger, branch string) *SpecsManager {
 
 // Initialize is a convenience wrapper that always enables auto-update.
 // Deprecated: Use InitializeWithAutoUpdate directly for better control.
-func (sm *SpecsManager) Initialize(ctx context.Context) error {
+func (sm *ConsensusSpecsManager) Initialize(ctx context.Context) error {
 	return sm.InitializeWithAutoUpdate(ctx, true)
 }
 
 // InitializeWithAutoUpdate prepares the specs repository for use.
 // If the repository doesn't exist, it will be cloned synchronously.
 // If it exists and autoUpdate is true, updates will run in the background.
-func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate bool) error {
+func (sm *ConsensusSpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate bool) error {
 	sm.log.Info("Initializing specs repository")
 
 	if _, err := os.Stat(sm.repoPath); os.IsNotExist(err) {
@@ -136,7 +146,7 @@ func (sm *SpecsManager) InitializeWithAutoUpdate(ctx context.Context, autoUpdate
 
 // GetSpec retrieves the content of a specific specification document.
 // The content is cached after first access to improve performance.
-func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (sm *ConsensusSpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Fork  string `json:"fork"`
 		Topic string `json:"topic"`
@@ -191,7 +201,7 @@ func (sm *SpecsManager) GetSpec(ctx context.Context, params json.RawMessage) (in
 
 // SearchSpecs searches for a query string across specification files.
 // It returns matching files with context around the matched lines.
-func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (sm *ConsensusSpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Query string `json:"query"`
 		Fork  string `json:"fork,omitempty"` // Optional: limit to specific fork
@@ -289,7 +299,7 @@ func (sm *SpecsManager) SearchSpecs(ctx context.Context, params json.RawMessage)
 
 // ListForks returns all available fork names from the repository.
 // It checks the actual directories present rather than just returning the hardcoded list.
-func (sm *SpecsManager) ListForks(ctx context.Context) (interface{}, error) {
+func (sm *ConsensusSpecsManager) ListForks(ctx context.Context) (interface{}, error) {
 	actualForks := []string{}
 
 	// Check which forks actually exist in the repository
@@ -326,7 +336,7 @@ func (sm *SpecsManager) ListForks(ctx context.Context) (interface{}, error) {
 
 // CompareForks generates a diff between the same topic across two different forks.
 // This helps understand how specifications evolved between protocol upgrades.
-func (sm *SpecsManager) CompareForks(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (sm *ConsensusSpecsManager) CompareForks(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Fork1 string `json:"fork1"`
 		Fork2 string `json:"fork2"`
@@ -384,7 +394,7 @@ func (sm *SpecsManager) CompareForks(ctx context.Context, params json.RawMessage
 
 // GetConstant searches for and retrieves the value of a protocol constant.
 // Constants are typically defined in markdown tables within the specifications.
-func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage) (interface{}, error) {
+func (sm *ConsensusSpecsManager) GetConstant(ctx context.Context, params json.RawMessage) (interface{}, error) {
 	var args struct {
 		Name string `json:"name"`
 		Fork string `json:"fork,omitempty"` // Optional: specific fork
@@ -462,7 +472,7 @@ func (sm *SpecsManager) GetConstant(ctx context.Context, params json.RawMessage)
 }
 
 // isValidFork checks if a fork name is in the list of known forks.
-func (sm *SpecsManager) isValidFork(fork string) bool {
+func (sm *ConsensusSpecsManager) isValidFork(fork string) bool {
 	for _, f := range availableForks {
 		if f == fork {
 			return true
@@ -474,7 +484,7 @@ func (sm *SpecsManager) isValidFork(fork string) bool {
 // computeSimpleDiff generates a line-by-line diff between two text files.
 // It uses a simple algorithm with lookahead to detect insertions, deletions, and changes.
 // The diff is limited to 100 changes to prevent overwhelming output.
-func (sm *SpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]interface{} {
+func (sm *ConsensusSpecsManager) computeSimpleDiff(lines1, lines2 []string) []map[string]interface{} {
 	diff := []map[string]interface{}{}
 
 	i, j := 0, 0

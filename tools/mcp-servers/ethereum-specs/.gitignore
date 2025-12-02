@@ -25,5 +25,6 @@ go.work.sum
 .DS_Store
 Thumbs.db
 
-# Cloned consensus-specs repository
+# Cloned spec repositories
 .consensus-specs/
+.execution-apis/

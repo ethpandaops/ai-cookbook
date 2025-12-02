@@ -1,13 +1,16 @@
-# Ethereum Consensus Specs MCP Server
+# Ethereum Specs MCP Server
 
-An MCP (Model Context Protocol) server that provides access to Ethereum consensus specifications for all forks.
+An MCP (Model Context Protocol) server that provides access to Ethereum specifications for both consensus layer and execution layer.
 
 ## Features
 
-- Access specifications for all Ethereum consensus forks: phase0, altair, bellatrix, capella, deneb, electra, fulu
+- **Consensus Layer**: Access specifications for all Ethereum consensus forks (phase0, altair, bellatrix, capella, deneb, electra, fulu)
+- **Execution Layer**: Access Engine API specs and JSON-RPC method definitions (paris, shanghai, cancun, prague, osaka)
 - Search across all specifications
 - Compare specifications between different forks
 - Retrieve configuration constants
+- Get detailed JSON-RPC method information
+- Fork/upgrade name mapping between consensus and execution layers
 - Automatic repository updates on startup (configurable)
 
 ## Available Tools
@@ -16,10 +19,11 @@ An MCP (Model Context Protocol) server that provides access to Ethereum consensu
 Retrieve the content of a specific specification document.
 
 **Parameters:**
-- `fork` (required): Fork name (phase0, altair, bellatrix, capella, deneb, electra, fulu)
+- `fork` (required): Fork name for consensus (phase0-fulu) or upgrade name for engine (paris-osaka)
 - `topic` (required): Topic name (beacon-chain, fork-choice, p2p-interface, validator, etc.)
+- `layer` (optional): `consensus` (default), `engine`, or `eth`
 
-**Example:**
+**Examples:**
 ```json
 {
   "name": "get_spec",
@@ -30,32 +34,49 @@ Retrieve the content of a specific specification document.
 }
 ```
 
+```json
+{
+  "name": "get_spec",
+  "arguments": {
+    "fork": "cancun",
+    "topic": "common",
+    "layer": "engine"
+  }
+}
+```
+
 ### `search_specs`
-Search for content across specifications.
+Search for content across specifications. Searches all layers by default.
 
 **Parameters:**
 - `query` (required): Search query string
-- `fork` (optional): Limit search to a specific fork
+- `fork` (optional): Limit search to a specific fork/upgrade
+- `layer` (optional): `consensus`, `engine`, `eth`, or `all` (default)
 
 **Example:**
 ```json
 {
   "name": "search_specs",
   "arguments": {
-    "query": "GetMetadata",
-    "fork": "fulu"
+    "query": "blob",
+    "layer": "all"
   }
 }
 ```
 
 ### `list_forks`
-List all available forks in the specifications.
+List all available forks/upgrades in the specifications.
+
+**Parameters:**
+- `layer` (optional): `consensus` (default), `engine`, or `all`
 
 **Example:**
 ```json
 {
   "name": "list_forks",
-  "arguments": {}
+  "arguments": {
+    "layer": "all"
+  }
 }
 ```
 
@@ -97,10 +118,59 @@ Retrieve configuration constants from the specifications.
 }
 ```
 
+### `get_rpc_method`
+Get detailed information about a JSON-RPC method including parameters, return type, and examples.
+
+**Parameters:**
+- `method` (required): JSON-RPC method name (e.g., `eth_call`, `engine_newPayloadV4`)
+
+**Example:**
+```json
+{
+  "name": "get_rpc_method",
+  "arguments": {
+    "method": "eth_call"
+  }
+}
+```
+
+### `list_rpc_methods`
+List available JSON-RPC methods with optional namespace filter.
+
+**Parameters:**
+- `namespace` (optional): Filter by namespace (`eth`, `engine`, `debug`)
+
+**Example:**
+```json
+{
+  "name": "list_rpc_methods",
+  "arguments": {
+    "namespace": "eth"
+  }
+}
+```
+
+### `get_fork_mapping`
+Get the mapping between consensus layer fork names and execution layer upgrade names.
+
+**Example:**
+```json
+{
+  "name": "get_fork_mapping",
+  "arguments": {}
+}
+```
+
+Returns mappings like:
+- bellatrix <-> paris (The Merge)
+- capella <-> shanghai (Withdrawals)
+- deneb <-> cancun (EIP-4844 Blobs)
+- electra <-> prague (Pectra upgrade)
+
 ## Requirements
 
-- Go 1.23+ 
-- Git (for cloning and updating the specs repository)
+- Go 1.23+
+- Git (for cloning and updating the specs repositories)
 
 ## Building
 
@@ -125,7 +195,8 @@ python3 -m src.ai_cookbook.main
 
 During installation, you'll be prompted for:
 - **Auto-update specs on startup**: Enable to pull latest specs (default: true)
-- **Specs branch to track**: Branch of ethereum/consensus-specs (default: dev)
+- **Specs branch to track**: Branch of ethereum/consensus-specs (default: master)
+- **Execution APIs branch to track**: Branch of ethereum/execution-apis (default: main)
 
 ## Manual Installation
 
@@ -144,7 +215,8 @@ make build
       "args": [],
       "env": {
         "AUTO_UPDATE": "true",
-        "SPECS_BRANCH": "dev"
+        "SPECS_BRANCH": "master",
+        "EXECUTION_APIS_BRANCH": "main"
       }
     }
   }
@@ -155,34 +227,44 @@ make build
 
 The server accepts the following environment variables:
 
-- `AUTO_UPDATE`: Set to "false" to disable automatic repository updates on startup (default: "true")
-- `SPECS_BRANCH`: Branch of ethereum/consensus-specs to use (default: "dev")
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTO_UPDATE` | `true` | Update both repos on startup |
+| `SPECS_BRANCH` | `master` | Branch for ethereum/consensus-specs |
+| `EXECUTION_APIS_BRANCH` | `main` | Branch for ethereum/execution-apis |
 
 ## Repository Management
 
-The server clones the ethereum/consensus-specs repository locally to `.consensus-specs/` in the server's directory. This keeps everything self-contained within the project and doesn't pollute your home directory.
+The server clones two repositories locally:
+- `.consensus-specs/` - ethereum/consensus-specs
+- `.execution-apis/` - ethereum/execution-apis
+
+These are stored in the server's directory to keep everything self-contained.
 
 When auto-update is enabled, the server will:
-1. Clone the repository if it doesn't exist
-2. Fetch and pull the latest changes from the configured branch
+1. Clone repositories if they don't exist
+2. Fetch and pull the latest changes from the configured branches
 3. Cache frequently accessed specifications in memory
 
 Updates run in the background to avoid blocking server startup.
 
-The local repository is:
-- Automatically created on first run
-- Updated in the background when auto-update is enabled
-- Excluded from git via `.gitignore`
-- Cleaned up when running `make clean`
-
 ## Architecture
 
-- **main.go**: MCP server implementation using the official Go SDK
-- **specs_manager.go**: Repository management and tool implementations
-- **go.mod**: Go module dependencies
-- **Makefile**: Build automation
+- **main.go**: MCP server implementation and tool handlers
+- **specs_manager.go**: Consensus specs repository management
+- **execution_specs_manager.go**: Execution APIs repository management
+- **yaml_parser.go**: OpenRPC YAML parsing utilities
+- **fork_mapping.go**: CL/EL fork name mapping
 
 The server uses the official MCP Go SDK and communicates over stdio, making it compatible with Claude Code and other MCP clients.
+
+## Layer Structure
+
+| Layer | Repository | Format | Organization |
+|-------|------------|--------|--------------|
+| `consensus` | ethereum/consensus-specs | Markdown | `specs/{fork}/{topic}.md` |
+| `engine` | ethereum/execution-apis | Markdown | `src/engine/{upgrade}.md` |
+| `eth` | ethereum/execution-apis | YAML | `src/eth/{category}.yaml` |
 
 ## Development
 
@@ -197,22 +279,8 @@ brew install go  # macOS
 
 1. Define parameter struct with proper jsonschema tags in main.go
 2. Implement the tool handler function in main.go
-3. Add the tool logic in specs_manager.go
+3. Add the tool logic in the appropriate manager file
 4. Register the tool using `mcp.AddTool()` in main.go
-
-### Performance Considerations
-
-- Specifications are cached in memory after first access
-- Git operations run in background on startup (when auto-update is enabled)
-- Search results are limited to prevent excessive memory usage
-- Diff comparisons are truncated after 100 changes for readability
-
-## Logging
-
-The server logs to stderr to avoid interfering with the MCP protocol on stdout. Logs include:
-- Server initialization status
-- Repository update progress
-- Tool execution errors
 
 ## Troubleshooting
 
@@ -228,7 +296,7 @@ The server logs to stderr to avoid interfering with the MCP protocol on stdout. 
 - Review logs for Git errors
 
 ### Tool errors
-- Ensure the repository is cloned: `ls .consensus-specs/` (in the server directory)
+- Ensure repositories are cloned: `ls .consensus-specs/ .execution-apis/`
 - Check that the requested fork/topic exists
 - Verify the branch contains the expected specifications
 - Run `make clean && make build` to force a fresh clone
