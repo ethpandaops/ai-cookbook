@@ -195,18 +195,39 @@ const toolHandlers = {
   },
 
   // Loki: support actions: query, labels, label_values
-  async loki_tool({ action = 'query', query, start = 'now-1h', end = 'now', limit = 100, label, datasource_uid }) {
+  // compact mode: truncates log lines and simplifies output to reduce token usage
+  async loki_tool({ action = 'query', query, start = 'now-1h', end = 'now', limit = 100, label, datasource_uid, compact = false, max_line_length = 500 }) {
     const datasourceUid = requireUidForType('loki', datasource_uid);
     const startNs = parseTime(start);
     const endNs = parseTime(end);
     if (action === 'query') {
       if (!query) throw new Error('query is required for action=query');
-      return await datasourceGet(datasourceUid, '/loki/api/v1/query_range', {
+      const result = await datasourceGet(datasourceUid, '/loki/api/v1/query_range', {
         query,
         start: startNs,
         end: endNs,
         limit,
       });
+
+      // Compact mode: simplify output to reduce tokens
+      if (compact && result?.data?.result) {
+        return {
+          status: result.status,
+          resultType: result.data.resultType,
+          stats: result.data.stats ? {
+            bytesProcessed: result.data.stats.summary?.bytesProcessedPerSecond,
+            linesProcessed: result.data.stats.summary?.totalLinesProcessed
+          } : undefined,
+          streams: result.data.result.map(stream => ({
+            labels: stream.stream,
+            entries: (stream.values || []).map(([ts, line]) => ({
+              ts: new Date(parseInt(ts) / 1e6).toISOString(),
+              line: line.length > max_line_length ? line.slice(0, max_line_length) + '...[truncated]' : line
+            }))
+          }))
+        };
+      }
+      return result;
     } else if (action === 'labels') {
       return await datasourceGet(datasourceUid, '/loki/api/v1/labels', { start: startNs, end: endNs });
     } else if (action === 'label_values') {
@@ -322,7 +343,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     },
     {
       name: 'loki_tool',
-      description: 'Interact with Loki: actions=query|labels|label_values',
+      description: 'Interact with Loki: actions=query|labels|label_values. Use compact=true to reduce token usage.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -333,6 +354,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           limit: { type: 'integer', description: 'Max log lines to return (default: 100)' },
           label: { type: 'string', description: 'Label name (for action=label_values)' },
           datasource_uid: { type: 'string', description: 'Datasource UID (required if multiple Loki datasources)' },
+          compact: { type: 'boolean', description: 'Simplify output and truncate lines to reduce tokens (default: false)' },
+          max_line_length: { type: 'integer', description: 'Max chars per log line in compact mode (default: 500)' },
         },
       },
     },

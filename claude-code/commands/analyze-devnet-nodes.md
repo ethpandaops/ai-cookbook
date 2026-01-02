@@ -1,238 +1,353 @@
 # Network Analysis Command
 
-## Command Specification
+Analyze Ethereum network nodes using the `ethereum-client-analyzer` subagent.
 
-The `analyze-network` command provides comprehensive analysis of Ethereum network nodes across different testnets and analysis scopes.
+**Rules**: Do not hallucinate. Do not provide mitigation ideas. Present data in tables.
 
-DO NOT HALLUCINATE ANY INFORMATION. DO NOT TRY TO PROVIDE ANY MITIGATION IDEAS, JUST FOCUS ON PRESENTING THE INFORMATION EFFICIENTLY SO THAT THE USE CAN MAKE THE DECISION. When in doubt, present data as tables.
-
-### Usage
+## Usage
 
 ```
-analyze-network <devnet> <scope> <target> [time_period]
+analyze-network <devnet> <scope> <target> [period] [mode]
 ```
 
-### Parameters
+## Parameters
 
-- **devnet**: The target testnet/devnet name (e.g., `fusaka-devnet-3`, `holesky`, `sepolia`)
-- **scope**: Analysis scope, one of:
-  - `instance` - Analyze a specific node instance
-  - `cl` - Analyze all instances of a consensus client type
-  - `el` - Analyze all instances of an execution client type
-  - `all` - Analyze all nodes on the network
-- **target**: The specific target based on scope:
-  - For `instance`: specific instance identifier
-  - For `cl`: consensus client name (grandine, lighthouse, lodestar, nimbus, prysm, teku)
-  - For `el`: execution client name (geth, nethermind, besu, erigon, reth, nimbusel)
-  - For `all`: use `nodes` as the target
-- **time_period**: Time range for analysis (optional, default: 1h)
-  - Examples: `30m`, `1h`, `2h`, `4h`, `6h`, `12h`, `1d`
+| Parameter | Description | Default | Examples |
+|-----------|-------------|---------|----------|
+| `devnet` | Target network | - | fusaka-devnet-3, holesky, sepolia |
+| `scope` | Analysis scope | - | instance, cl, el, all |
+| `target` | Target based on scope | - | See below |
+| `period` | Time range | 30m | 15m, 30m, 1h |
+| `mode` | Analysis depth | full | quick, full |
 
-## Analysis Scope Examples
+**Target by scope**:
+- `instance`: specific instance ID (e.g., lighthouse-besu-1)
+- `cl`: consensus client (grandine, lighthouse, lodestar, nimbus, prysm, teku)
+- `el`: execution client (geth, nethermind, besu, erigon, reth, nimbusel)
+- `all`: use "nodes"
 
-### 1. Single Instance Analysis
-```bash
-analyze-network fusaka-devnet-3 instance lighthouse-001 1h
+**Period limits**: Default 30m, max recommended 1h. For longer periods, subagents use 30m pagination windows automatically.
+
+**Modes**:
+| Mode | Use Case | Speed | Detail |
+|------|----------|-------|--------|
+| `quick` | "Is there a problem?" | Fast | Error counts only |
+| `full` | "Give me details" | Slower | Complete analysis |
+
+## Execution Strategy
+
+### Phase 1: Pre-Discovery (REQUIRED before spawning subagents)
+
+Before launching any subagents, discover which clients actually exist on the devnet to avoid wasting tokens on empty queries.
+
+**For `scope=all`**: Run these Loki queries first:
 ```
-Analyzes logs for a specific lighthouse instance `lighthouse-001` on fusaka-devnet-3 for the last hour.
+# Discover CL clients present
+action: label_values
+label: ethereum_cl
+query: {testnet="{devnet}"}
+start: now-30m
+end: now
 
-### 2. Consensus Client Type Analysis  
-```bash
-analyze-network holesky cl teku 4h
-```
-Analyzes logs for all Teku consensus client instances on Holesky testnet for the last 4 hours.
+# Discover EL clients present
+action: label_values
+label: ethereum_el
+query: {testnet="{devnet}"}
+start: now-30m
+end: now
 
-### 3. Execution Client Type Analysis
-```bash
-analyze-network sepolia el geth 30m
-```
-Analyzes logs for all Geth execution client instances on Sepolia testnet for the last 30 minutes.
-
-### 4. Full Network Analysis
-```bash
-analyze-network fusaka-devnet-3 all nodes 2h
-```
-Analyzes logs for all nodes (both CL and EL) on fusaka-devnet-3 network for the last 2 hours. This launches 12 parallel ethereum-client-analyzer agents (one per client type) and aggregates the results.
-
-## Implementation Details
-
-The command uses the `ethereum-client-analyzer` agent to perform the analysis with the ethpandaops-production-data MCP server. The agent constructs appropriate Loki queries based on the specified scope and parameters.
-
-### Execution Strategy
-
-**Single Target Analysis:**
-- For `instance`, `cl`, or `el` scopes with a specific target, a single `ethereum-client-analyzer` agent is launched
-
-**Multiple Target Analysis:**
-- For `all` scope, multiple `ethereum-client-analyzer` agents are launched in parallel:
-  - One agent per CL client type (grandine, lighthouse, lodestar, nimbus, prysm, teku)
-  - One agent per EL client type (geth, nethermind, besu, erigon, reth, nimbusel)
-  - Results are aggregated and presented in a unified report
-
-### Parallel Execution
-
-When analyzing multiple targets, the command uses Claude Code's Task tool to launch concurrent sub-agents:
-
-```bash
-# For analyze-network fusaka-devnet-3 all nodes 1h
-# Launches 12 parallel agents (6 CL + 6 EL types):
-
-Task ethereum-client-analyzer "Analyze lighthouse on fusaka-devnet-3" &
-Task ethereum-client-analyzer "Analyze teku on fusaka-devnet-3" &
-Task ethereum-client-analyzer "Analyze geth on fusaka-devnet-3" &
-Task ethereum-client-analyzer "Analyze nethermind on fusaka-devnet-3" &
-# ... (continue for all client types)
-
-# Wait for all analyses to complete, then aggregate results
+# Discover all instances (to pass to subagents)
+action: label_values
+label: instance
+query: {testnet="{devnet}"}
+start: now-30m
+end: now
 ```
 
-### Query Construction
+**For `scope=cl`**: Verify the target CL client exists and get instances:
+```
+action: label_values
+label: instance
+query: {testnet="{devnet}", ethereum_cl="{target}"}
+start: now-30m
+end: now
+```
 
-Based on the scope, different Loki query patterns are used:
+**For `scope=el`**: Verify the target EL client exists and get instances:
+```
+action: label_values
+label: instance
+query: {testnet="{devnet}", ethereum_el="{target}"}
+start: now-30m
+end: now
+```
 
-- **Instance scope**: `{testnet="<devnet>", instance="<target>"}`
-- **CL scope**: `{testnet="<devnet>", ethereum_cl="<target>"}`
-- **EL scope**: `{testnet="<devnet>", ethereum_el="<target>"}`
-- **All scope**: Parallel queries for each client type on `{testnet="<devnet>"}`
+**For `scope=instance`**: Auto-detect client type:
+```
+# Query one log line to extract labels
+action: query
+query: {testnet="{devnet}", instance="{target}"}
+start: now-5m
+end: now
+limit: 1
+compact: true
+```
 
-### Result Aggregation
+From the result, extract `ethereum_cl` or `ethereum_el` label to determine:
+- If `ethereum_cl` present → `layer=cl`, `client={ethereum_cl value}`
+- If `ethereum_el` present → `layer=el`, `client={ethereum_el value}`
 
-For parallel multi-client analysis, results are aggregated as follows:
+**Decision logic**:
+- If no clients/instances found → Report "No {target} found on {devnet}" and stop
+- If clients found → Proceed to Phase 2 with discovered data
 
-1. **Executive Summary**: Combined health status (worst case scenario)
-2. **Node Instances**: Merged tables from all sub-analyses
-3. **Critical Issues**: Consolidated and deduplicated issues across all clients
-4. **Network Connectivity**: Combined connectivity metrics
-5. **Recommendations**: Prioritized actions across all analyzed components
+### Phase 2: Launch Subagents
+
+Only spawn subagents for clients confirmed to exist in Phase 1.
+
+**Pass discovered instances to subagents** to skip their Phase 1 discovery.
+
+**For `scope=all`**:
+1. Group discovered instances by client type
+2. Launch CL subagents in parallel (only for discovered CL clients)
+3. Launch EL subagents in parallel (only for discovered EL clients)
+
+**For `scope=cl` or `scope=el`**: Single subagent for the specified client.
+
+**For `scope=instance`**: Single subagent with auto-detected client info.
+
+### Subagent Prompt Format
+
+Use this exact format when invoking `ethereum-client-analyzer`:
+
+```
+devnet={devnet} client={client} layer={cl|el} period={period} mode={mode} [instances={inst1,inst2}] [instance={instance}]
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `devnet` | Yes | Target testnet name |
+| `client` | Yes | Client name (lowercase) |
+| `layer` | Yes | "cl" or "el" |
+| `period` | Yes | Time range (e.g., "30m") |
+| `mode` | Yes | "quick" or "full" |
+| `instances` | No | Comma-separated instance list (skips subagent Phase 1) |
+| `instance` | No | Single instance ID (for instance scope) |
+
+### Parallel Execution Example (scope=all, mode=full)
+
+**Step 1**: Pre-discovery queries return:
+- CL clients: `[lighthouse, teku, nimbus]`
+- EL clients: `[geth, nethermind]`
+- Instances: `[lighthouse-geth-1, lighthouse-geth-2, teku-nethermind-1, nimbus-geth-1, ...]`
+
+**Step 2**: Group instances by client:
+- lighthouse: `lighthouse-geth-1,lighthouse-geth-2`
+- teku: `teku-nethermind-1`
+- nimbus: `nimbus-geth-1`
+- geth: `lighthouse-geth-1,lighthouse-geth-2,nimbus-geth-1`
+- nethermind: `teku-nethermind-1`
+
+**Step 3**: Launch subagents with pre-discovered instances:
+```
+# CL subagents (parallel)
+Task ethereum-client-analyzer "devnet=fusaka-devnet-3 client=lighthouse layer=cl period=30m mode=full instances=lighthouse-geth-1,lighthouse-geth-2"
+Task ethereum-client-analyzer "devnet=fusaka-devnet-3 client=teku layer=cl period=30m mode=full instances=teku-nethermind-1"
+Task ethereum-client-analyzer "devnet=fusaka-devnet-3 client=nimbus layer=cl period=30m mode=full instances=nimbus-geth-1"
+
+# EL subagents (parallel)
+Task ethereum-client-analyzer "devnet=fusaka-devnet-3 client=geth layer=el period=30m mode=full instances=lighthouse-geth-1,lighthouse-geth-2,nimbus-geth-1"
+Task ethereum-client-analyzer "devnet=fusaka-devnet-3 client=nethermind layer=el period=30m mode=full instances=teku-nethermind-1"
+```
+
+Wait for all to complete, then aggregate results.
+
+### Instance Scope Example (auto-detection)
+
+**Step 1**: Query returns log with labels:
+```
+{testnet="fusaka-devnet-3", instance="lighthouse-geth-1", ethereum_cl="lighthouse", ethereum_el="geth"}
+```
+
+**Step 2**: Extract client info → `layer=cl, client=lighthouse`
+
+**Step 3**: Launch subagent:
+```
+Task ethereum-client-analyzer "devnet=fusaka-devnet-3 client=lighthouse layer=cl period=30m mode=full instance=lighthouse-geth-1"
+```
+
+## Timeouts and Retries
+
+| Scope | Timeout per Subagent | Max Retries |
+|-------|---------------------|-------------|
+| instance | 60s | 2 |
+| cl/el | 90s | 2 |
+| all | 120s per subagent | 1 |
+
+**Timeout handling**:
+- If subagent exceeds timeout → Mark as TIMEOUT in results, continue with others
+- Include timeout info in final report
+
+**Retry logic**:
+- Retry on: network errors, Loki query failures
+- Do not retry on: no data found, parsing errors
+- Between retries: wait 5 seconds
+
+## Result Aggregation
+
+Combine subagent outputs into a unified report:
+
+1. **Executive Summary**: Worst-case health status across all analyses
+2. **Instance Inventory**: Merged tables from all subagents (preserve all rows)
+3. **Issues**: Deduplicated issues across all clients, sorted by severity
+4. **Connectivity**: Combined metrics for all instances
+
+**Aggregation rules**:
+- Health status: CRITICAL > WARNING > TIMEOUT > HEALTHY (use worst case)
+- Preserve all instance rows from all subagents
+- Deduplicate identical issues (same message, same instance)
+- Group issues by client type for readability
+
+Do not summarize or omit individual instance data.
 
 ## Output Format
 
-All analyses follow the same structured format with data presented in tables for easy parsing:
-
 ### Executive Summary
-- Overall health status: HEALTHY/WARNING/CRITICAL
-- Current slot and sync status
-- Key issues summary (if any)
-
-### Node Instances Status
-Instance overview table:
 ```
-| Instance ID | Client Type | Layer | Status | Current Block/Slot | Peer Count | Sync State | Health |
-|------------|-------------|-------|--------|---------------------|------------|------------|---------|
-| lighthouse-001 | lighthouse | CL | Running | 12345678 | 87 | Synced | HEALTHY |
-| geth-001 | geth | EL | Running | 18975432 | 45 | Synced | HEALTHY |
-| teku-002 | teku | CL | Running | 12345677 | 92 | Syncing | WARNING |
-```
-
-Sync progress table (for syncing instances):
-```
-| Instance ID | Layer | Start Block/Slot | Current Block/Slot | Target Block/Slot | Rate/Min | Est. Completion |
-|------------|-------|------------------|--------------------|--------------------|----------|----------------|
-| teku-002 | CL | 12340000 | 12345677 | 12345800 | 245 slots | 00:30:15 |
-| nethermind-003 | EL | 18970000 | 18975000 | 18975500 | 450 blocks | 00:01:07 |
+| Metric | Value |
+|--------|-------|
+| Overall Status | CRITICAL / WARNING / HEALTHY |
+| Mode | quick / full |
+| Devnet | {devnet} |
+| Period | {period} |
+| CL Clients Analyzed | {list} |
+| EL Clients Analyzed | {list} |
+| Total Instances | {count} |
+| Issues Found | {count} |
+| Subagent Failures | {count or "None"} |
 ```
 
-### Critical Issues Identified
-Issues summary table:
+### Instance Status (all instances from all subagents)
 ```
-| Issue | Count | First Seen | Last Seen | Urgency | Impact |
-|-------|-------|------------|-----------|---------|---------|
-| Connection timeout | 12 | 14:32:15 | 15:45:22 | Medium | Performance |
-| Fork choice error | 3 | 15:10:33 | 15:12:45 | High | Consensus |
-| Memory warning | 45 | 14:00:00 | 15:50:00 | Low | Resource |
+| Instance | CL Client | EL Client | Slot/Block | Peers | Sync | Health |
+|----------|-----------|-----------|------------|-------|------|--------|
 ```
 
-
-Network connectivity table:
+### Issues Summary (deduplicated)
 ```
-| Instance | Layer | Connected Peers | Inbound | Outbound | Avg Latency (ms) | Status |
-|----------|-------|-----------------|---------|----------|------------------|---------|
-| lighthouse-001 | CL | 87 | 32 | 55 | 145 | Healthy |
-| geth-001 | EL | 45 | 18 | 27 | 98 | Healthy |
-| teku-002 | CL | 92 | 28 | 64 | 132 | Healthy |
+| Client | Issue | Count | Severity |
+|--------|-------|-------|----------|
 ```
 
-### Recommendations
-Priority-based action table:
-```
-| Priority | Action | Timeline | Expected Impact | Difficulty |
-|----------|--------|----------|----------------|------------|
-| Critical | Investigate fork choice errors | Immediate | High | Medium |
-| High | Optimize peer connections | 1-2 hours | Medium | Low |
-| Medium | Monitor memory usage trends | 24 hours | Low | Low |
-```
+## Debugging Use Cases
 
-## Integration Examples
+Use this command to debug common issues on devnets:
 
-### 1. Monitoring Dashboard
+### Quick Health Check
+**Question**: "Is the network healthy?"
 ```bash
-# Collect metrics for all CL types on multiple networks
-analyze-network fusaka-devnet-3 cl lighthouse 1h
-analyze-network holesky cl teku 1h
-analyze-network sepolia cl prysm 1h
+analyze-network fusaka-devnet-3 all nodes 30m quick
 ```
+Returns error counts per client in seconds. If all zeros → network is healthy.
 
-### 2. Incident Response
+### Investigate Specific Client Issues
+**Question**: "Lighthouse nodes are having problems"
 ```bash
-# Quick full network health check (parallel analysis of all client types)
-analyze-network fusaka-devnet-3 all nodes 30m
-
-# Deep dive into specific problematic client
-analyze-network fusaka-devnet-3 cl grandine 4h
-
-# Parallel analysis of all CL clients for comparison
-analyze-network fusaka-devnet-3 all nodes 1h | grep "CL\|Consensus"
+analyze-network fusaka-devnet-3 cl lighthouse 30m full
 ```
+Returns detailed error logs, sync status, and peer counts for all Lighthouse instances.
 
-### 3. Performance Analysis
+### Debug a Specific Node
+**Question**: "Node lighthouse-geth-1 is not syncing"
 ```bash
-# Sequential individual client analysis
-analyze-network holesky el geth 2h
-analyze-network holesky el nethermind 2h  
-analyze-network holesky el besu 2h
+analyze-network fusaka-devnet-3 instance lighthouse-geth-1 1h full
+```
+Deep dive into one instance with full error details and sync progress.
 
-# Parallel analysis of all EL clients for comprehensive comparison
-analyze-network holesky all nodes 2h | grep "EL\|Execution"
+### Compare Client Performance
+**Question**: "Which clients are struggling?"
+```bash
+analyze-network fusaka-devnet-3 all nodes 30m quick
+```
+Quick mode shows error counts per client - compare to identify problematic clients.
+
+### Check After Deployment
+**Question**: "Did the new release break anything?"
+```bash
+# Quick check first
+analyze-network fusaka-devnet-3 all nodes 15m quick
+
+# If issues found, get details
+analyze-network fusaka-devnet-3 cl teku 30m full
 ```
 
-## Command Aliases
+### Investigate Sync Issues
+**Question**: "Some nodes are falling behind"
+```bash
+# Check all CL clients for sync status
+analyze-network fusaka-devnet-3 all nodes 30m full
+```
+Look at the "Sync State" column - nodes with "Syncing" or low slot numbers are behind.
 
-- `anet` - Short alias for `analyze-network`
-- `check-network` - Alternative command name
-- `net-health` - Health check focused alias
+### Check Peer Connectivity
+**Question**: "Nodes can't find peers"
+```bash
+analyze-network fusaka-devnet-3 cl lighthouse 30m full
+```
+Check the Connectivity table for low peer counts or connection errors.
 
-## Performance Characteristics
+### Debug EL Issues
+**Question**: "Execution layer is having problems"
+```bash
+analyze-network fusaka-devnet-3 el geth 30m full
+```
+Analyzes Geth instances for block import issues, sync problems, or errors.
 
-### Single Target Analysis
-- **Execution Time**: 30-60 seconds depending on log volume
-- **Resource Usage**: Single ethereum-client-analyzer agent
-- **Memory**: ~100MB per analysis
+### Monitor During Fork
+**Question**: "How are nodes handling the fork?"
+```bash
+# Quick check across all clients
+analyze-network fusaka-devnet-3 all nodes 15m quick
 
-### Multi-Target Analysis (All Nodes)
-- **Execution Time**: 30-90 seconds (parallel execution)
-- **Resource Usage**: Up to 12 concurrent ethereum-client-analyzer agents  
-- **Memory**: ~1.2GB peak usage during parallel execution
-- **Throughput**: 12x faster than sequential analysis
+# If issues, check specific clients
+analyze-network fusaka-devnet-3 cl prysm 30m full
+analyze-network fusaka-devnet-3 cl nimbus 30m full
+```
 
-## Validation
+## Command Examples Summary
 
-The command validates:
-- Devnet name exists and has available data
-- Scope is one of the valid options
-- Target is appropriate for the chosen scope
-- Time period is in valid format
-- For `all` scope, ensures sufficient system resources for parallel execution
+```bash
+# Quick health checks
+analyze-network fusaka-devnet-3 all nodes 30m quick      # Fast network health
+analyze-network holesky cl lighthouse 15m quick          # Quick Lighthouse check
 
-Invalid parameters result in helpful error messages with examples of correct usage.
+# Full analysis
+analyze-network fusaka-devnet-3 all nodes 30m full       # Complete network analysis
+analyze-network holesky cl teku 30m full                 # Detailed Teku analysis
+analyze-network sepolia el geth 30m full                 # Detailed Geth analysis
+
+# Instance debugging
+analyze-network fusaka-devnet-3 instance lighthouse-geth-1 1h full   # Deep dive one node
+
+# Abbreviated (defaults: period=30m, mode=full)
+analyze-network fusaka-devnet-3 all nodes                # Full network analysis
+analyze-network fusaka-devnet-3 cl nimbus                # Full Nimbus analysis
+```
 
 ## Error Handling
 
-### Parallel Execution Failures
-- If individual sub-agents fail, continue with remaining analyses
-- Report partial results with clear indication of failed components
-- Provide fallback to sequential execution if resource constraints detected
+- If pre-discovery finds no clients → Report clearly and stop (don't spawn empty subagents)
+- If a subagent times out → Mark as TIMEOUT, continue with others, note in summary
+- If a subagent fails → Mark as FAILED, continue with others, note failure reason
+- If a subagent returns no data → Include in report as "No data" (don't omit)
+- Report partial results with clear indication of gaps
 
-### Network Issues  
-- Retry failed Loki queries up to 3 times
-- Graceful degradation when MCP server is unavailable
-- Cache intermediate results to prevent data loss during long analyses
+### Error Report Format
+```
+## Subagent Issues
+
+| Client | Status | Reason |
+|--------|--------|--------|
+| prysm | TIMEOUT | Exceeded 120s |
+| lodestar | FAILED | Loki query error |
+```

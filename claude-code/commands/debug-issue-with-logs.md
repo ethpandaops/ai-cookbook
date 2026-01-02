@@ -1,344 +1,232 @@
 # Debug Issue with Logs
 
-## Overview
-Ultrathink. This command enables systematic debugging of issues by analyzing provided logs OR issue descriptions, investigating the codebase, and developing root cause theories. **CRITICAL: This command is for INVESTIGATION ONLY. Claude must NOT attempt to fix the issue, only identify potential root causes.**
+Systematic debugging command for root cause investigation. **Investigation only - do NOT fix issues.**
 
-## How It Works
-1. **User provides input** either as:
-   - Logs containing error messages, stack traces, or unusual behavior
-   - Description of the issue they're experiencing
-2. **Claude analyzes input** to identify symptoms and potential problem areas
-3. **Investigates codebase** using various debugging tools and techniques
-4. **Collects facts** through API calls, docker commands, and code analysis
-5. **Develops theories** presenting 3 potential root causes based on evidence
-6. **Documents findings** with reproducible commands for verification
+## Workflow
 
-## Instructions for Claude
+1. User provides logs OR describes issue
+2. Determine investigation approach (see Tool Selection below)
+3. Analyze symptoms and identify investigation areas
+4. Investigate codebase and gather runtime data
+5. Present 3 root cause theories with verification commands
 
-### STEP 1: Request Input
-When invoked, first determine what information the user has:
+## Tool Selection
+
+Choose the right approach based on the issue type:
+
+| Issue Type | Recommended Approach | When to Use |
+|------------|---------------------|-------------|
+| Ethereum client (CL/EL) | `ethereum-client-analyzer` agent | Client sync issues, errors, peer connectivity |
+| ethPandaOps devnet/testnet | Direct MCP tools | Custom queries, metrics correlation, non-client logs |
+| Local application | Standard debugging | Codebase issues, local logs |
+
+### For Ethereum Client Issues
+
+Use the `ethereum-client-analyzer` agent via Task tool:
 
 ```
-I can help debug your issue. Please choose how you'd like to proceed:
-
-1. **I have logs** - Paste error messages, stack traces, or system logs
-2. **I'll describe the issue** - Explain what's happening without logs
-
-What information do you have available?
+Task tool with subagent_type: ethereum-client-analyzer
+prompt: "Analyze {client} on {devnet}, layer={cl|el}, period=30m, mode={quick|full}"
 ```
 
-### STEP 2A: Log Analysis Path (ULTRATHINK REQUIRED)
-If logs are provided:
+**Parameters:**
+- `devnet`: fusaka-devnet-3, holesky, sepolia, etc.
+- `client`: lighthouse, teku, prysm, geth, nethermind, etc.
+- `layer`: cl (consensus) or el (execution)
+- `mode`: quick (fast health check) or full (detailed analysis)
 
-1. **Parse and identify key indicators:**
-   - Error messages and stack traces
-   - Timestamps and sequence of events
-   - Affected components or services
-   - Resource constraints or limits
-   - Network or connectivity issues
-   - Permission or access problems
+The agent handles phased querying automatically to minimize token usage.
 
-2. **Extract critical information:**
-   - Error codes and types
-   - File paths and line numbers
-   - Function/method names
-   - Variable states
-   - Environment details
+### For Custom ethPandaOps Queries
 
-3. **Identify patterns:**
-   - Recurring errors
-   - Timing correlations
-   - Cascading failures
-   - Resource exhaustion patterns
+Use MCP tools directly when you need:
+- Custom LogQL/PromQL queries
+- Cross-service correlation
+- Metrics + logs together
+- ClickHouse (Xatu) blockchain data
 
-### STEP 2B: Description Analysis Path (ULTRATHINK REQUIRED)
-If only a description is provided:
+**Available MCP Tools:**
 
-1. **Gather detailed information through targeted questions:**
-   ```
-   To help me investigate, please answer these questions:
-   
-   • What exactly is happening? (e.g., app crashes, slow performance, incorrect output)
-   • When did this start occurring? (specific time, after a deployment, etc.)
-   • How frequently does it occur? (always, intermittently, under specific conditions)
-   • What were you doing when it happened? (specific user actions, API calls, etc.)
-   • Has anything changed recently? (code, configuration, infrastructure)
-   • What environment is affected? (development, staging, production)
-   • Are there any error messages visible to users?
-   ```
+| Tool | Purpose | Example Use |
+|------|---------|-------------|
+| `loki_tool` | Container logs | `{testnet="fusaka-devnet-3"} \|~ "error"` |
+| `prometheus_tool` | Devnet metrics | `ethereum_slots_head{network="fusaka-devnet-3"}` |
+| `clickhouse_tool` | Xatu blockchain data | Beacon block analysis, attestation queries |
 
-2. **Based on description, identify investigation areas:**
-   - Component or service likely affected
-   - Type of issue (performance, functionality, connectivity)
-   - Potential failure points
-   - Critical code paths to examine
+**Key Labels for Filtering:**
+- Devnets: `testnet`, `network`, `ethereum_cl`, `ethereum_el`, `instance`
+- Platform: `ingress_user`, `container`, `pod`, `namespace`
 
-3. **Proactively gather logs and system state:**
-   ```bash
-   # Try to retrieve relevant logs based on description
-   docker logs <likely_container> --tail 500 --since 1h
-   journalctl -u <likely_service> --since "1 hour ago"
-   tail -n 1000 /var/log/<application>/*.log
-   
-   # Check system state
-   docker ps -a
-   systemctl status <services>
-   netstat -tulpn | grep <port>
-   ```
-
-### STEP 3: Systematic Investigation
-Based on the analysis (logs or description), conduct parallel investigations:
-
-#### Phase 1: Code Investigation (PARALLEL TASKS)
-Execute these investigations simultaneously:
-
-```markdown
-**Task 1: Examine error location**
-- Navigate to specific files/lines mentioned in logs
-- Analyze the failing code section
-- Check recent commits affecting this area
-- Review function dependencies
-
-**Task 2: Search for similar issues**
-- Grep for error messages across codebase
-- Search for related error handling
-- Look for TODO/FIXME comments nearby
-- Check for known issues in documentation
-
-**Task 3: Configuration analysis**
-- Review configuration files
-- Check environment variables
-- Verify service dependencies
-- Examine deployment settings
-
-**Task 4: Resource and state investigation**
-- Check for resource limits (memory, CPU, disk)
-- Verify database connections
-- Examine network configurations
-- Review file permissions
+**Always use these Loki settings:**
+```
+compact: true
+limit: 50
+max_line_length: 300
 ```
 
-#### Phase 2: Dynamic Analysis
-Gather runtime information using appropriate tools:
+## Step 1: Get Input
 
-**For containerized applications:**
-```bash
-# Check container status and resources
-docker ps -a
-docker stats
-docker logs <container_id> --tail 100
+Ask user:
+- **Option 1**: Paste logs (errors, stack traces, system logs)
+- **Option 2**: Describe the issue (what, when, how often, what changed)
+- **Option 3**: Specify devnet/client for Ethereum-specific investigation
 
-# Inspect container configuration
-docker inspect <container_id>
+## Step 2: Analyze Input
 
-# Execute debugging commands inside container
-docker exec <container_id> ps aux
-docker exec <container_id> df -h
-docker exec <container_id> netstat -tulpn
-docker exec <container_id> env
+**From logs**, extract:
+- Error messages, codes, stack traces
+- Timestamps and event sequence
+- Affected components, file paths, line numbers
+- Resource/network/permission indicators
+
+**From description**, identify:
+- Likely affected components
+- Issue type (performance, functionality, connectivity)
+- Critical code paths to examine
+
+## Step 3: Parallel Investigation
+
+Run these investigation phases concurrently:
+
+| Phase | Focus | Key Actions |
+|-------|-------|-------------|
+| Code | Error location | Check files/lines in logs, recent commits, dependencies |
+| Config | Settings | Environment vars, config files, service dependencies |
+| Runtime | System state | Container/process status, resources, network |
+| Logs | Patterns | Grep for errors, check related services |
+
+**Local investigation commands** (use as needed):
+- `docker ps -a`, `docker logs <container> --tail 100`
+- `docker inspect <container>`, `docker stats`
+- `ps aux`, `top -b -n 1`, `free -m`, `df -h`
+- `netstat -tulpn`, `curl -v <endpoint>`
+
+### Ethereum/Devnet Investigation (MCP Tools)
+
+For ethPandaOps infrastructure issues, query remotely:
+
+**1. Check health first:**
+```
+mcp__ethpandaops-production-data__health_check()
 ```
 
-**For system-level debugging:**
-```bash
-# Process investigation
-ps aux | grep <process_name>
-lsof -p <pid>
-strace -p <pid> -f
-
-# System resources
-top -b -n 1
-free -m
-df -h
-iostat -x 1 5
-
-# Network debugging
-netstat -tulpn
-ss -tulpn
-curl -v <endpoint>
-nslookup <domain>
+**2. Discover available labels:**
+```
+loki_tool(action="labels", start="now-1h")
+loki_tool(action="label_values", label="testnet", start="now-1h")
 ```
 
-**For application-specific debugging:**
-```bash
-# Database connections
-mysql -e "SHOW PROCESSLIST"
-psql -c "SELECT * FROM pg_stat_activity"
-redis-cli INFO
-
-# API testing
-curl -X GET/POST <api_endpoint> -H "Content-Type: application/json" -d '{}'
-wget --debug <url>
-
-# Log analysis
-tail -f /var/log/<application>.log
-journalctl -u <service> -n 100
-grep -r "ERROR\|FATAL\|CRITICAL" /var/log/
+**3. Error aggregation (understand volume before fetching):**
+```
+loki_tool(
+  action="query",
+  query='count_over_time({testnet="fusaka-devnet-3"} |~ "(?i)error" [30m])',
+  start="now-30m",
+  compact=true
+)
 ```
 
-### STEP 4: Evidence Collection
-Document all findings systematically:
-
-```markdown
-## Debugging Facts Collected
-
-### 1. Initial Analysis Findings
-- **Primary Issue**: [Exact error message or described problem]
-- **Frequency**: [How often it occurs]
-- **First Occurrence**: [When it started]
-- **Preceding Events**: [What happened before the issue]
-
-### 2. Code Investigation Results
-- **Affected Files**: [List of files involved]
-- **Problematic Functions**: [Specific functions/methods]
-- **Recent Changes**: [Commits that might be related]
-- **Code Patterns**: [Any anti-patterns or issues found]
-
-### 3. System State
-- **Resource Usage**: [CPU, Memory, Disk metrics]
-- **Service Status**: [Running services and their states]
-- **Network Status**: [Connectivity issues]
-- **Dependencies**: [External service availability]
-
-### 4. Commands Executed for Verification
-```[List all commands run with their outputs]```
+**4. Targeted log fetch:**
+```
+loki_tool(
+  action="query",
+  query='{testnet="fusaka-devnet-3", ethereum_cl="lighthouse"} |~ "(?i)(error|warn)"',
+  start="now-30m",
+  limit=50,
+  compact=true,
+  max_line_length=300
+)
 ```
 
-### STEP 5: Root Cause Theory Development
-Based on collected evidence, present THREE distinct theories:
-
-```markdown
-## Root Cause Analysis
-
-### Theory 1: [Most Likely Cause]
-**Confidence Level**: High/Medium/Low
-
-**Evidence Supporting This Theory:**
-- [Specific log entries pointing to this issue]
-- [Code analysis findings]
-- [System state observations]
-
-**Why This Is The Root Cause:**
-[Detailed explanation of the failure mechanism]
-
-**How To Verify:**
-```bash
-# Commands to confirm this theory
-[Specific commands that would prove/disprove this theory]
+**5. Metrics correlation:**
+```
+prometheus_tool(
+  query='ethereum_slots_head{network="fusaka-devnet-3"}',
+  mode="range",
+  start="now-1h",
+  step="30s"
+)
 ```
 
-### Theory 2: [Alternative Cause]
-**Confidence Level**: High/Medium/Low
-
-**Evidence Supporting This Theory:**
-- [Different interpretation of the same evidence]
-- [Additional findings]
-- [Historical patterns]
-
-**Why This Could Be The Root Cause:**
-[Explanation of this failure scenario]
-
-**How To Verify:**
-```bash
-# Commands to confirm this theory
-[Verification commands]
+**6. Xatu blockchain data (ClickHouse):**
+```
+clickhouse_tool(
+  sql='SELECT slot, proposer_index FROM beacon_api_eth_v2_beacon_block WHERE network = \'fusaka-devnet-3\' ORDER BY slot DESC LIMIT 10',
+  from="now-1h"
+)
 ```
 
-### Theory 3: [Less Likely But Possible Cause]
-**Confidence Level**: High/Medium/Low
+**Common LogQL Filters:**
+| Filter | Purpose |
+|--------|---------|
+| `\|~ "(?i)error"` | Case-insensitive error match |
+| `\|!~ "health.?check"` | Exclude health checks |
+| `\|= "slot"` | Exact string match |
 
-**Evidence Supporting This Theory:**
-- [Edge case scenarios]
-- [Indirect evidence]
-- [Environmental factors]
+## Step 4: Document Findings
 
-**Why This Might Be The Root Cause:**
-[Explanation of this possibility]
+Collect facts in structured format:
 
-**How To Verify:**
-```bash
-# Commands to confirm this theory
-[Verification commands]
+```
+## Findings
+- Primary Issue: [exact error/symptom]
+- Affected Files: [list]
+- System State: [resources, services, network]
+- Recent Changes: [relevant commits/deployments]
 ```
 
-## Recommended Next Steps
-1. Verify the most likely theory using provided commands
-2. Gather additional logs if needed: [Specify what logs would help]
-3. Check these specific areas: [List areas needing investigation]
-4. Consider these monitoring additions: [Suggest future debugging aids]
+## Step 5: Present 3 Theories
+
+For each theory, provide:
+
+```
+### Theory N: [Name]
+**Confidence**: High/Medium/Low
+
+**Evidence**:
+- [specific log entries]
+- [code analysis findings]
+- [system observations]
+
+**Mechanism**: [how this causes the issue]
+
+**Verify**:
+[specific commands to prove/disprove]
 ```
 
-### STEP 6: Senior Developer Mindset
-When debugging, channel the mindset of a senior developer:
+## Debugging Principles
 
-1. **Question Assumptions**: Don't trust error messages at face value
-2. **Look for Side Effects**: The actual problem might be upstream
-3. **Consider Timing**: Race conditions, timeouts, and synchronization issues
-4. **Check the Basics**: Permissions, disk space, network connectivity
-5. **Review Recent Changes**: What changed recently in code or environment?
-6. **Think About Scale**: Issues that only appear under load
-7. **Examine Edge Cases**: Null values, empty sets, boundary conditions
-8. **Verify Dependencies**: External services, libraries, APIs
+- Question assumptions - error messages can mislead
+- Look upstream - actual problem may not be at error location
+- Check basics - permissions, disk, network, dependencies
+- Consider timing - race conditions, timeouts
+- Review recent changes - code and environment
+- Reproduce before theorizing when possible
 
-## Example Usage
+## Rules
 
-### Example 1: With Logs
-```
-User: Debug this issue
-Claude: I can help debug your issue. Please choose how you'd like to proceed:
-1. I have logs - Paste error messages, stack traces, or system logs
-2. I'll describe the issue - Explain what's happening without logs
+**DO**:
+- Use parallel investigation
+- Provide exact verification commands
+- Consider multiple interpretations
+- Document everything
+- Use `ethereum-client-analyzer` agent for Ethereum client issues (saves tokens, structured output)
+- Always use `compact=true` and `limit=50` for Loki queries
+- Check error counts (aggregation) before fetching full logs
 
-User: 1 [Pastes error logs showing database connection timeout]
-Claude: [Ultrathinks and analyzes the logs]
-[Investigates code, checks configuration, runs docker/system commands]
-[Presents collected facts and three theories about connection pool exhaustion, network issues, or database overload]
-```
+**DON'T**:
+- Fix issues or modify code/config
+- Assume first theory is correct
+- Skip verification or trust errors blindly
+- Use `limit > 100` for Loki queries (token overflow)
+- Query more than 1h without pagination (split into 30m windows)
+- Forget to filter by devnet/testnet label
 
-### Example 2: With Description Only
-```
-User: Debug this issue
-Claude: I can help debug your issue. Please choose how you'd like to proceed:
-1. I have logs - Paste error messages, stack traces, or system logs
-2. I'll describe the issue - Explain what's happening without logs
+## Datasource Reference
 
-User: 2
-Claude: To help me investigate, please answer these questions:
-[Asks targeted questions]
-User: The application becomes unresponsive every day around 2 PM. Users see timeout errors. Started happening after last week's deployment.
-Claude: [Ultrathinks about the pattern]
-[Proactively gathers logs from the timeframe]
-[Investigates deployment changes, cron jobs, traffic patterns]
-[Presents three theories about scheduled jobs, traffic spikes, or memory leaks]
-```
-
-## Notes for Claude
-
-### DO:
-- Use ultrathink for deep analysis
-- Run multiple investigations in parallel
-- Provide exact commands for fact verification
-- Consider multiple interpretations of evidence
-- Think like a senior developer with years of debugging experience
-- Document everything for reproducibility
-- Look beyond the obvious symptoms
-
-### DON'T:
-- Attempt to fix the issue
-- Make changes to code or configuration
-- Assume the first theory is correct
-- Skip verification steps
-- Ignore environmental factors
-- Trust error messages blindly
-- Focus only on the immediate error location
-
-### Debugging Principles:
-- **Correlation != Causation**: Just because two things happen together doesn't mean one causes the other
-- **Occam's Razor**: The simplest explanation is often correct, but verify it
-- **Five Whys**: Keep asking "why" to get to the root cause
-- **Reproduce First**: If possible, reproduce the issue before theorizing
-- **Isolate Variables**: Change one thing at a time when testing theories
-- **Document Everything**: Future you (or others) will thank you
-
----
-
-**IMPORTANT**: This is a debugging investigation command. Focus on understanding and identifying root causes. Do NOT implement fixes or modifications. Wait for the user to provide either logs or an issue description before beginning the analysis.
+| UID | Type | Description |
+|-----|------|-------------|
+| P8E80F9AEF21F6940 | Loki | Container logs - filter by `testnet`, `ethereum_cl`, `ethereum_el` |
+| P3893C6D10EAD8176 | Prometheus | Devnet metrics - use `network` label |
+| P4169E866C3094E38 | VictoriaMetrics | Platform metrics - use `ingress_user`, `container`, `pod` |
+| PDE22E36FB877C574 | ClickHouse | Xatu blockchain data - always filter by partition key |
