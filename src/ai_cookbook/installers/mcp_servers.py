@@ -132,6 +132,45 @@ class MCPServersInstaller(InteractiveInstaller):
             removed_servers = []
             for server_name in list(self.available_servers.keys()):
                 if server_name in mcp_servers:
+                    # Clean up build artifacts for binary-based servers
+                    server_config_path = self.mcp_servers_source / server_name / "config.json"
+                    if server_config_path.exists():
+                        server_config_data = read_json_file(server_config_path)
+                        
+                        # If it's a binary runtime server, clean up the binary
+                        if server_config_data.get('runtime') == 'binary':
+                            implementation = server_config_data.get('implementation', f"tools/mcp-servers/{server_name}")
+                            implementation_path = PROJECT_ROOT / implementation
+                            
+                            if implementation_path.exists():
+                                # Run make clean if Makefile exists
+                                makefile_path = implementation_path / "Makefile"
+                                if makefile_path.exists():
+                                    try:
+                                        from .utils import run_command
+                                        run_command(['make', 'clean'], cwd=str(implementation_path))
+                                        print(f"  🧹 Ran make clean for {server_name}")
+                                    except Exception as e:
+                                        # Fall back to manual cleanup if make clean fails
+                                        entry_point = server_config_data.get('entry_point', f"bin/{server_name}-mcp")
+                                        binary_path = implementation_path / entry_point
+                                        
+                                        if binary_path.exists():
+                                            try:
+                                                binary_path.unlink()
+                                                print(f"  🗑️  Removed binary: {binary_path.name}")
+                                            except Exception:
+                                                pass
+                                        
+                                        # Clean up bin directory if empty
+                                        bin_dir = implementation_path / "bin"
+                                        if bin_dir.exists() and not any(bin_dir.iterdir()):
+                                            try:
+                                                bin_dir.rmdir()
+                                                print(f"  🗑️  Removed empty bin directory")
+                                            except Exception:
+                                                pass
+                    
                     del mcp_servers[server_name]
                     removed_servers.append(server_name)
                     
@@ -328,15 +367,27 @@ class MCPServersInstaller(InteractiveInstaller):
                     except Exception as e:
                         print(f"⚠️  Could not load datasource descriptions: {e}")
                     
-            # First install npm dependencies if needed
-            if not (implementation_path / "node_modules").exists():
-                print(f"\n📦 Installing dependencies for {implementation_path.name}...")
-                result = run_command(['npm', 'install'], cwd=str(implementation_path))
-                if result.returncode != 0:
-                    return InstallationResult(
-                        False,
-                        f"Failed to install npm dependencies: {result.stderr}"
-                    )
+            # Handle binary runtime servers
+            if server_config_data.get('runtime') == 'binary':
+                build_cmd = server_config_data.get('build_command')
+                if build_cmd:
+                    print(f"\n🔨 Building {server_name}...")
+                    result = run_command(build_cmd.split(), cwd=str(implementation_path))
+                    if result.returncode != 0:
+                        return InstallationResult(
+                            False,
+                            f"Failed to build {server_name}: {result.stderr}"
+                        )
+            else:
+                # First install npm dependencies if needed
+                if not (implementation_path / "node_modules").exists():
+                    print(f"\n📦 Installing dependencies for {implementation_path.name}...")
+                    result = run_command(['npm', 'install'], cwd=str(implementation_path))
+                    if result.returncode != 0:
+                        return InstallationResult(
+                            False,
+                            f"Failed to install npm dependencies: {result.stderr}"
+                        )
                     
             # Test the configuration if it's a Grafana-based server
             if 'grafana_url' in env_vars and 'service_token' in env_vars:
@@ -382,11 +433,19 @@ http.get('/api/user').then(r => {
                     print("⚠️  Could not test authentication, but continuing...")
                 
             # Create the server configuration for Claude Code
-            server_config = {
-                'command': 'node',
-                'args': [str(implementation_path / entry_point)],
-                'env': {}
-            }
+            if server_config_data.get('runtime') == 'binary':
+                # Use args format for consistency with Claude's expectations
+                server_config = {
+                    'command': str(implementation_path / entry_point),
+                    'args': [],
+                    'env': {}
+                }
+            else:
+                server_config = {
+                    'command': 'node',
+                    'args': [str(implementation_path / entry_point)],
+                    'env': {}
+                }
             
             # Map config values to environment variables
             for key, value in env_vars.items():
@@ -437,6 +496,47 @@ http.get('/api/user').then(r => {
                     f"Server '{server_name}' is not installed"
                 )
                 
+            # Clean up build artifacts for binary-based servers
+            if server_name in self.available_servers:
+                server_config_path = self.mcp_servers_source / server_name / "config.json"
+                if server_config_path.exists():
+                    server_config_data = read_json_file(server_config_path)
+                    
+                    # If it's a binary runtime server, clean up the binary
+                    if server_config_data.get('runtime') == 'binary':
+                        implementation = server_config_data.get('implementation', f"tools/mcp-servers/{server_name}")
+                        implementation_path = PROJECT_ROOT / implementation
+                        
+                        if implementation_path.exists():
+                            # Run make clean if Makefile exists
+                            makefile_path = implementation_path / "Makefile"
+                            if makefile_path.exists():
+                                try:
+                                    from .utils import run_command
+                                    run_command(['make', 'clean'], cwd=str(implementation_path))
+                                    print(f"  🧹 Ran make clean for {server_name}")
+                                except Exception as e:
+                                    # Fall back to manual cleanup if make clean fails
+                                    entry_point = server_config_data.get('entry_point', f"bin/{server_name}-mcp")
+                                    binary_path = implementation_path / entry_point
+                                    
+                                    if binary_path.exists():
+                                        try:
+                                            binary_path.unlink()
+                                            print(f"  🗑️  Removed binary: {binary_path.name}")
+                                        except Exception:
+                                            pass
+                                    
+                                    # Clean up bin directory if empty
+                                    bin_dir = implementation_path / "bin"
+                                    if bin_dir.exists() and not any(bin_dir.iterdir()):
+                                        try:
+                                            bin_dir.rmdir()
+                                            print(f"  🗑️  Removed empty bin directory")
+                                        except Exception:
+                                            pass
+                
+            # Remove from Claude configuration
             del mcp_servers[server_name]
             config['mcpServers'] = mcp_servers
             write_json_file(self.claude_config_path, config)

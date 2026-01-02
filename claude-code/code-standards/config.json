@@ -23,6 +23,12 @@
       "patterns": ["*.css", "*.tsx", "*.jsx", "*.js", "*.ts", "*.mdx", "*.html", "*.vue", "*.svelte", "*.astro"],
       "standards_path": "claude-code/code-standards/tailwindcss/CLAUDE.md",
       "enabled": true
+    },
+    "writing": {
+      "name": "Writing",
+      "patterns": ["*.md"],
+      "standards_path": "claude-code/code-standards/writing/CLAUDE.md",
+      "enabled": true
     }
   }
 }

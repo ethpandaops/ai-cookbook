@@ -5,10 +5,8 @@
 
 # Core AI development commands that are essential for the team
 commands:
-  - create-implementation-plan-v3.md
   - parallel-repository-tasks.md
   - eip.md
-  - review-implementation-plan.md
 
 # Language-specific coding standards for consistent code quality
 code_standards:
@@ -34,4 +32,3 @@ mcp_servers: []
 
 # Utility scripts for project management and automation (installed as a group)
 scripts: []
-

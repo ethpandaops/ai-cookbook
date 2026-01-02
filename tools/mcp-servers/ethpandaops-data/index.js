@@ -88,11 +88,6 @@ async function discoverDatasources() {
     const found = {};
     for (const ds of datasources) {
       const typeNormalized = normalizeType(ds.type);
-      // Exclude grafana-clickhouse-datasource as it has issues with the query format
-      if (ds.type === 'grafana-clickhouse-datasource') {
-        console.error(`  Skipping ${ds.name} (${ds.type}) - incompatible datasource type`);
-        continue;
-      }
       if (["loki","prometheus","clickhouse"].includes(typeNormalized)) {
         found[ds.uid] = {
           uid: ds.uid,
@@ -306,8 +301,8 @@ const toolHandlers = {
             refId: 'A',
             datasource: { uid: datasourceUid, type: ds.type },
             queryType: 'sql',
-            editorMode: 'code',
-            format: 'table',
+            editorType: 'sql',
+            format: 1, // FormatOptionTable = 1
             intervalMs: 1000,
             maxDataPoints: 1000,
             rawSql: sql,
