@@ -163,6 +163,35 @@ def ensure_opencode_config() -> None:
     log(f"wrote default opencode config to {opencode_config}")
 
 
+def install_ai_cookbook_defaults() -> None:
+    """Install ethPandaOps ai-cookbook recommended tools."""
+    ai_cookbook_bin = Path.home() / ".local" / "bin" / "ai-cookbook"
+    if not ai_cookbook_bin.exists():
+        log("ai-cookbook not found, skipping recommended tools installation")
+        return
+
+    # Check if recommended tools are already installed by looking for marker file
+    marker_file = Path.home() / ".claude" / ".ai-cookbook-installed"
+    if marker_file.exists():
+        log("ai-cookbook recommended tools already installed, skipping")
+        return
+
+    log("installing ai-cookbook recommended tools...")
+    result = subprocess.run(
+        [str(ai_cookbook_bin), "recommended", "-y", "--no-auto-update"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode == 0:
+        # Create marker file to prevent re-running on container restart
+        marker_file.parent.mkdir(parents=True, exist_ok=True)
+        marker_file.write_text("installed\n", encoding="utf-8")
+        log("ai-cookbook recommended tools installed successfully")
+    else:
+        log(f"failed to install ai-cookbook recommended tools: {result.stderr.strip()}")
+
+
 def ensure_dir_ownership(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
     try:
@@ -210,6 +239,7 @@ def main() -> None:
     ensure_claude_config()
     ensure_amp_config()
     ensure_opencode_config()
+    install_ai_cookbook_defaults()
     log("configured defaults for container use")
 
 

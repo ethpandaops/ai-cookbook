@@ -177,6 +177,12 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --de
 # Ensure Rust/Cargo is on PATH.
 ENV PATH="/home/node/.cargo/bin:${PATH}"
 
+# Install ast-grep (for code linting hooks).
+RUN cargo install ast-grep --locked
+
+# Install golangci-lint (for Go linting hooks).
+RUN curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b /home/node/.local/bin
+
 # Install Oh My Zsh with Powerlevel10k theme and useful plugins.
 RUN sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended \
   && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git ${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k \
@@ -191,6 +197,32 @@ RUN sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="powerlevel10k\/powerlevel10k"/
 
 # Add a default Powerlevel10k configuration (lean style, no fancy icons needed).
 RUN curl -fsSL https://raw.githubusercontent.com/romkatv/powerlevel10k/master/config/p10k-lean.zsh -o ~/.p10k.zsh
+
+# Clone and set up ethPandaOps ai-cookbook for recommended defaults.
+ARG AI_COOKBOOK_REPO=https://github.com/ethpandaops/ai-cookbook.git
+ARG AI_COOKBOOK_BRANCH=master
+RUN git clone --depth=1 --branch ${AI_COOKBOOK_BRANCH} ${AI_COOKBOOK_REPO} /home/node/.ai-cookbook \
+  && cd /home/node/.ai-cookbook \
+  && uv venv \
+  && uv pip install -r requirements.txt \
+  && mkdir -p /home/node/.local/bin \
+  && cat > /home/node/.local/bin/ai-cookbook <<'WRAPPER'
+#!/bin/bash
+VENV_PYTHON="/home/node/.ai-cookbook/.venv/bin/python"
+if [ -f "$VENV_PYTHON" ]; then
+    PYTHON_CMD="$VENV_PYTHON"
+else
+    echo "Error: Virtual environment not found at /home/node/.ai-cookbook/.venv" >&2
+    exit 1
+fi
+export PYTHONPATH="/home/node/.ai-cookbook/src:$PYTHONPATH"
+exec "$PYTHON_CMD" -m ai_cookbook.main "$@"
+WRAPPER
+
+RUN chmod +x /home/node/.local/bin/ai-cookbook
+
+# Install ai-cookbook recommended defaults (MCP servers, hooks, etc.)
+RUN /home/node/.local/bin/ai-cookbook recommended -y --no-auto-update
 
 # Passwordless sudo for the non-root user (for unattended / automation workflows).
 USER root
