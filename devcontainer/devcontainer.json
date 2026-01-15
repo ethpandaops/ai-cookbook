@@ -1,0 +1,66 @@
+{
+  "name": "Agents Sandbox",
+  "init": true,
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": {
+      "TZ": "${localEnv:TZ:UTC}",
+      "CLAUDE_CODE_VERSION": "latest",
+      "CODEX_VERSION": "latest",
+      "AMP_VERSION": "latest",
+      "OPENCODE_VERSION": "latest"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropic.claude-code",
+        "openai.chatgpt",
+        "sourcegraph.amp",
+        "sst-dev.opencode"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit"
+        },
+        "terminal.integrated.fontFamily": "Menlo, Monaco, 'DejaVu Sans Mono', 'Liberation Mono', 'Courier New', monospace",
+        "terminal.integrated.fontSize": 14,
+        "editor.fontFamily": "Menlo, Monaco, 'DejaVu Sans Mono', 'Liberation Mono', 'Courier New', monospace",
+        "editor.fontSize": 14,
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "zsh",
+            "icon": "terminal"
+          },
+          "bash": {
+            "path": "bash",
+            "icon": "terminal-bash"
+          }
+        }
+      }
+    }
+  },
+  "remoteUser": "node",
+  "postCreateCommand": "uv run --no-sync /workspace/.devcontainer/post_install.py",
+  "mounts": [
+    "source=commandhistory,target=/commandhistory,type=volume",
+    "source=claude-code-config,target=/home/node/.claude,type=volume",
+    "source=codex-config,target=/home/node/.codex,type=volume",
+    "source=amp-config,target=/home/node/.amp,type=volume",
+    "source=opencode-config,target=/home/node/.config/opencode,type=volume",
+    "source=gh-config,target=/home/node/.config/gh,type=volume",
+    "source=zsh-config,target=/home/node/.oh-my-zsh,type=volume",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,consistency=cached,readonly"
+  ],
+  "containerEnv": {
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    "CODEX_HOME": "/home/node/.codex",
+    "AMP_HOME": "/home/node/.amp"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace"
+}
