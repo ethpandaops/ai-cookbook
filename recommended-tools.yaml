@@ -22,7 +22,6 @@ hooks:
   - gofmt
   - golangci-lint
   - typescript
-  - always-ultrathink
 
 # Claude Code agents for specialized AI assistance
 agents: []
