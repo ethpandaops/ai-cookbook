@@ -12,6 +12,7 @@ The majority of this repo focuses around [Claude Code](https://claude.ai/code) i
 ### ✨ Available Tools
 
 - [Claude Code - Commands](./claude-code/commands) - reusable slash commands that we use every day.
+- [Claude Code - Skills](./claude-code/skills) - enhanced slash commands with frontmatter, argument support, and organized supporting files.
 - [Claude Code - Code Standards](./claude-code/code-standards) - supports multiple languages with minimal token overhead.
 - [Claude Code - Hooks](./claude-code/hooks) - before/after hooks that put Claude Code on rails. e.g. `gofmt` after Claude touches a `.go` file.
 - [Scripts](./scripts) - scripts that we find useful, like programatically creating `CLAUDE.md` recursively in a project
@@ -90,9 +91,9 @@ Enhanced implementation planning with improved analysis, dependency management, 
 
 Facilitates systematic review of implementation plans with step-by-step analysis and feedback collection. Use this to review and refine implementation plans before execution, ensuring all proposed changes align with project requirements. Usually run after `create-implementation-plan-v2` has generated the plan.
 
-### `eip`
+### `eip` (Skill)
 
-Analyzes Ethereum Improvement Proposals by fetching content and optionally deep-diving into implementations. Use this when you need to understand an EIP's specifications and see how various clients have implemented it.
+Analyzes Ethereum Improvement Proposals by fetching content and optionally deep-diving into implementations. Supports direct invocation with arguments: `/eip 4844`. Use this when you need to understand an EIP's specifications and see how various clients have implemented it.
 
 ### `create-feedback-loop`
 

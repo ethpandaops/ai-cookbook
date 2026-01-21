@@ -14,6 +14,7 @@ from typing import List, Dict, Optional, Callable, Any
 
 from .config.settings import ORG_NAME, ORG_DISPLAY_NAME, VERSION
 from .installers.commands import CommandsInstaller
+from .installers.skills import SkillsInstaller
 from .installers.code_standards import CodeStandardsInstaller
 from .installers.hooks import HooksInstaller
 from .installers.agents import AgentsInstaller
@@ -104,7 +105,8 @@ def get_installers() -> Dict[str, Any]:
     return {
         'recommended': RecommendedToolsInstaller(),
         'commands': CommandsInstaller(),
-        'code-standards': CodeStandardsInstaller(), 
+        'skills': SkillsInstaller(),
+        'code-standards': CodeStandardsInstaller(),
         'hooks': HooksInstaller(),
         'agents': AgentsInstaller(),
         'scripts': ScriptsInstaller(),
@@ -186,7 +188,7 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict[str, A
             current_section = 'quick'
             print(f"{Colors.BOLD}Quick Setup{Colors.NC}")
             print(f"{Colors.DIM}One-click configuration for the team{Colors.NC}")
-        elif name in ['commands', 'code-standards', 'hooks', 'agents', 'scripts'] and current_section != 'tools':
+        elif name in ['commands', 'skills', 'code-standards', 'hooks', 'agents', 'scripts'] and current_section != 'tools':
             current_section = 'tools'
             print(f"\n{Colors.BOLD}Tools{Colors.NC}")
             print(f"{Colors.DIM}Individual component management{Colors.NC}")
@@ -229,6 +231,11 @@ def draw_menu(installer_names: List[str], selected: int, installers: Dict[str, A
                             global_count = len(details['global_hooks'])
                             local_count = len(details['local_hooks'])
                             print(f"{Colors.DIM}     Hooks: {Colors.NC}{global_count} global, {local_count} local")
+                    elif name == 'skills':
+                        status = details.get('status', {})
+                        installed_skills = status.get('installed_skills', [])
+                        available_skills = status.get('available_skills', [])
+                        print(f"{Colors.DIM}     Skills: {Colors.NC}{len(installed_skills)} installed, {len(available_skills)} available")
                     elif name == 'agents':
                         status = details.get('status', {})
                         installed_agents = status.get('installed_agents', [])
@@ -271,7 +278,7 @@ def run_interactive() -> None:
     
     installers = get_installers()
     # Order the menu items properly: recommended, tools, then uninstall
-    installer_names = ['recommended', 'commands', 'code-standards', 'hooks', 'agents', 'scripts', 'mcp-servers', 'uninstall']
+    installer_names = ['recommended', 'commands', 'skills', 'code-standards', 'hooks', 'agents', 'scripts', 'mcp-servers', 'uninstall']
     
     selected = 0
     show_details = False
@@ -433,6 +440,8 @@ def run_component_menu(component_name: str, installer: Any) -> None:
             run_hooks_menu(installer)
         elif component_name == 'commands':
             run_commands_menu(installer)
+        elif component_name == 'skills':
+            run_skills_menu(installer)
         elif component_name == 'code-standards':
             run_code_standards_menu(installer)
         elif component_name == 'agents':
@@ -1110,6 +1119,172 @@ def draw_agents_menu(agents: List[str], selected: int, installer: Any, show_deta
         print(f"{Colors.GREEN}Press Enter/→ to install '{selected_agent}'{Colors.NC}")
     
     print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
+
+
+def run_skills_menu(installer: Any) -> None:
+    """Run skills component submenu with individual skill management"""
+    global terminal_resized
+
+    # Get available skills from the installer
+    available_skills = installer.list_available_skills()
+
+    if not available_skills:
+        clear_screen()
+        print(f"\n{Colors.YELLOW}No skills available{Colors.NC}")
+        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+        getch()
+        return
+
+    selected = 0
+    show_details = False
+    force_redraw = True
+
+    try:
+        clear_screen()
+        while True:
+            if terminal_resized:
+                terminal_resized = False
+                force_redraw = True
+                clear_screen()
+
+            if force_redraw:
+                draw_skills_menu(available_skills, selected, installer, show_details)
+                force_redraw = False
+
+            key = getch(timeout=0.1)
+
+            if key is None:
+                if terminal_resized:
+                    continue
+            elif key == 'q' or key == '\x03' or key == 'LEFT':  # q or Ctrl+C or left arrow
+                print(Colors.SHOW_CURSOR)
+                return
+            elif key == 'UP' and selected > 0:
+                selected -= 1
+                show_details = False
+                force_redraw = True
+            elif key == 'DOWN' and selected < len(available_skills) - 1:
+                selected += 1
+                show_details = False
+                force_redraw = True
+            elif key == 'd':
+                show_details = not show_details
+                force_redraw = True
+            elif key == '\r' or key == '\n' or key == 'RIGHT':  # Enter or right arrow
+                selected_skill = available_skills[selected]
+
+                # Toggle installation for selected skill
+                status = installer.check_status()
+                installed_skills = status.get('installed_skills', [])
+
+                if selected_skill in installed_skills:
+                    # Uninstall skill
+                    result = installer.uninstall_skill(selected_skill)
+                else:
+                    # Install skill
+                    result = installer.install_skill(selected_skill)
+
+                # Show result briefly
+                if result:
+                    show_operation_result(result, selected_skill, "install" if selected_skill not in installed_skills else "uninstall")
+
+                force_redraw = True
+            elif key == 'a':  # Install all
+                results = []
+                status = installer.check_status()
+                installed_skills = status.get('installed_skills', [])
+                for skill in available_skills:
+                    if skill not in installed_skills:
+                        result = installer.install_skill(skill)
+                        results.append((skill, result))
+                show_batch_results(results, "install")
+                force_redraw = True
+            elif key == 'r':  # Remove all
+                results = []
+                status = installer.check_status()
+                installed_skills = status.get('installed_skills', [])
+                for skill in installed_skills:
+                    result = installer.uninstall_skill(skill)
+                    results.append((skill, result))
+                show_batch_results(results, "uninstall")
+                force_redraw = True
+
+    except KeyboardInterrupt:
+        print(Colors.SHOW_CURSOR)
+        return
+    except Exception as e:
+        print(f"\n{Colors.RED}Error in skills menu: {e}{Colors.NC}")
+        print(f"\n{Colors.DIM}Press any key to continue...{Colors.NC}")
+        getch()
+    finally:
+        print(Colors.SHOW_CURSOR)
+
+
+def draw_skills_menu(skills: List[str], selected: int, installer: Any, show_details: bool = False) -> None:
+    """Draw the skills submenu"""
+    # Get current installation status
+    status = installer.check_status()
+    installed_skills = status.get('installed_skills', [])
+
+    # Calculate maximum skill name length for alignment
+    max_skill_length = max(len(skill) for skill in skills) if skills else 30
+    max_skill_length = max(max_skill_length, 35)  # Ensure minimum width
+
+    def get_item_status(skill: str) -> str:
+        is_installed = skill in installed_skills
+        if is_installed:
+            return f"{Colors.GREEN}[INSTALLED]{Colors.NC}"
+        else:
+            return f"{Colors.GRAY}[NOT INSTALLED]{Colors.NC}"
+
+    def get_item_display(skill: str, is_selected: bool) -> str:
+        is_installed = skill in installed_skills
+        prefix = f"{Colors.GREEN}✓{Colors.NC} " if is_installed else "  "
+
+        if is_selected:
+            return f"{prefix}{Colors.REVERSE}{skill:<{max_skill_length}}{Colors.NC}"
+        else:
+            if is_installed:
+                return f"{prefix}{skill:<{max_skill_length}}"
+            else:
+                return f"{prefix}{Colors.DIM}{skill:<{max_skill_length}}{Colors.NC}"
+
+    def show_skill_details(skill: str, is_installed: bool) -> None:
+        # Get skill info from installer details
+        details = installer.get_details()
+        skill_info = details.get('available_skills', {}).get(skill, {})
+        desc = skill_info.get('description', 'Enhanced Claude Code skill with argument support')
+        print(f"\n{Colors.DIM}     {desc}{Colors.NC}")
+        if skill in installed_skills:
+            target_dir = status.get('skills_dir', '')
+            print(f"{Colors.DIM}     Location: {target_dir}/{skill}/{Colors.NC}")
+
+    # Draw menu using base function
+    draw_base_menu(
+        "🎯 Claude Skills",
+        skills,
+        selected,
+        get_item_status,
+        get_item_display,
+        header_info={
+            f"Total Skills": f"{len(skills)}",
+            f"Installed": f"{len(installed_skills)}"
+        },
+        show_details=show_details,
+        detail_func=lambda skill, _: show_skill_details(skill, skill in installed_skills)
+    )
+
+    # Show action hint at bottom
+    selected_skill = skills[selected]
+    is_installed = selected_skill in installed_skills
+
+    if is_installed:
+        print(f"{Colors.YELLOW}Press Enter/→ to uninstall '{selected_skill}'{Colors.NC}")
+    else:
+        print(f"{Colors.GREEN}Press Enter/→ to install '{selected_skill}'{Colors.NC}")
+
+    print(f"\n{Colors.DIM}↑/↓: Navigate  Enter/→: Install/Uninstall  d: Details  a: Install All  r: Remove All  q/←: Back{Colors.NC}")
+
 
 def run_scripts_menu(installer: Any) -> None:
     """Run scripts component submenu"""
