@@ -6,7 +6,7 @@
 # Core AI development commands that are essential for the team
 commands:
   - parallel-repository-tasks.md
-  - eip.md
+  - ask-questions-if-underspecified.md
 
 # Language-specific coding standards for consistent code quality
 code_standards:
@@ -14,6 +14,7 @@ code_standards:
   - python
   - rust
   - tailwindcss
+  - writing
 
 # Essential development hooks for automated code quality
 hooks:

@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+# Originally from https://github.com/banteg/agents/tree/master/devcontainer
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import shutil
+from pathlib import Path
+
+TMUX_CONFIG = """\
+set -g default-terminal "tmux-256color"
+set -g focus-events on
+set -sg escape-time 10
+set -g mouse on
+set -g history-limit 200000
+set -g renumber-windows on
+setw -g mode-keys vi
+
+# Keep new panes/windows in the same cwd
+bind c new-window -c "#{pane_current_path}"
+bind | split-window -h -c "#{pane_current_path}"
+bind - split-window -v -c "#{pane_current_path}"
+unbind '"'
+unbind %
+
+# Reload config
+bind r source-file ~/.tmux.conf \\; display-message "tmux.conf reloaded"
+
+# Terminal features
+set -as terminal-features ",xterm-ghostty:RGB"
+set -ga terminal-overrides '*:Ss=\\E[%p1%d q:Se=\\E[ q'
+"""
+
+
+def log(message: str) -> None:
+    print(f"post-install: {message}", file=sys.stderr)
+
+
+def run_git(
+    args: list[str], cwd: Path, check: bool = False
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(cwd), *args],
+        check=check,
+        capture_output=True,
+        text=True,
+    )
+
+
+def run_sudo(args: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["sudo", *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def resolve_workspace() -> Path:
+    env_workspace = os.environ.get("WORKSPACE_FOLDER")
+    if env_workspace:
+        workspace = Path(env_workspace)
+    else:
+        workspace = Path("/workspace")
+    if workspace.exists():
+        return workspace
+    return Path.cwd()
+
+
+def is_git_repo(cwd: Path) -> bool:
+    result = run_git(["rev-parse", "--is-inside-work-tree"], cwd)
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
+def ensure_global_gitignore(workspace: Path) -> None:
+    result = run_git(["config", "--global", "--path", "core.excludesfile"], workspace)
+    if result.returncode != 0:
+        log("no global core.excludesfile configured")
+        return
+
+    raw_path = result.stdout.strip()
+    if not raw_path:
+        log("no global core.excludesfile configured")
+        return
+
+    excludes_path = Path(raw_path).expanduser()
+    if not excludes_path.is_absolute():
+        excludes_path = (Path.home() / excludes_path).resolve()
+
+    if excludes_path.exists():
+        log(f"global core.excludesfile exists at {excludes_path}")
+        return
+
+    source = workspace / ".devcontainer" / ".gitignore_global"
+    if not source.exists():
+        log(
+            f"global core.excludesfile missing at {excludes_path} and no template copy found"
+        )
+        return
+
+    excludes_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, excludes_path)
+    log(f"copied gitignore to {excludes_path}")
+
+
+def ensure_codex_config() -> None:
+    codex_dir = Path(os.environ.get("CODEX_HOME", str(Path.home() / ".codex")))
+    codex_dir.mkdir(parents=True, exist_ok=True)
+    codex_config = codex_dir / "config.toml"
+    if codex_config.exists():
+        log(f"skipping codex config (already exists at {codex_config})")
+        return
+
+    codex_config.write_text(
+        'approval_policy = "never"\nsandbox_mode = "danger-full-access"\n',
+        encoding="utf-8",
+    )
+    log(f"wrote default codex config to {codex_config}")
+
+
+def ensure_claude_config() -> None:
+    claude_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", str(Path.home() / ".claude")))
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    claude_config = claude_dir / "settings.json"
+    if claude_config.exists():
+        log(f"skipping claude settings (already exists at {claude_config})")
+        return
+
+    data = {"permissions": {"defaultMode": "bypassPermissions"}}
+    claude_config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    log(f"wrote default claude settings to {claude_config}")
+
+
+def ensure_amp_config() -> None:
+    amp_dir = Path(os.environ.get("AMP_HOME", str(Path.home() / ".amp")))
+    amp_dir.mkdir(parents=True, exist_ok=True)
+    amp_config = amp_dir / "settings.json"
+    if amp_config.exists():
+        log(f"skipping amp settings (already exists at {amp_config})")
+        return
+
+    # Amp uses settings.json for configuration
+    data = {"autoApprove": True}
+    amp_config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    log(f"wrote default amp settings to {amp_config}")
+
+
+def ensure_opencode_config() -> None:
+    xdg_config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+    opencode_dir = xdg_config / "opencode"
+    opencode_dir.mkdir(parents=True, exist_ok=True)
+    opencode_config = opencode_dir / "opencode.json"
+    if opencode_config.exists():
+        log(f"skipping opencode config (already exists at {opencode_config})")
+        return
+
+    # OpenCode uses opencode.json for configuration
+    # Set autoApprove to skip confirmation prompts
+    data = {"autoApprove": True}
+    opencode_config.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    log(f"wrote default opencode config to {opencode_config}")
+
+
+def install_ai_cookbook_defaults() -> None:
+    """Install ethPandaOps ai-cookbook recommended tools."""
+    ai_cookbook_bin = Path.home() / ".local" / "bin" / "ai-cookbook"
+    if not ai_cookbook_bin.exists():
+        log("ai-cookbook not found, skipping recommended tools installation")
+        return
+
+    # Check if recommended tools are already installed by looking for marker file
+    marker_file = Path.home() / ".claude" / ".ai-cookbook-installed"
+    if marker_file.exists():
+        log("ai-cookbook recommended tools already installed, skipping")
+        return
+
+    log("installing ai-cookbook recommended tools...")
+    result = subprocess.run(
+        [str(ai_cookbook_bin), "recommended", "-y", "--no-auto-update"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode == 0:
+        # Create marker file to prevent re-running on container restart
+        marker_file.parent.mkdir(parents=True, exist_ok=True)
+        marker_file.write_text("installed\n", encoding="utf-8")
+        log("ai-cookbook recommended tools installed successfully")
+    else:
+        log(f"failed to install ai-cookbook recommended tools: {result.stderr.strip()}")
+
+
+def ensure_dir_ownership(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        stat = path.stat()
+    except OSError as exc:
+        log(f"unable to stat {path}: {exc}")
+        return
+
+    uid = os.getuid()
+    gid = os.getgid()
+    if stat.st_uid == uid and stat.st_gid == gid:
+        return
+
+    result = run_sudo(["chown", "-R", f"{uid}:{gid}", str(path)])
+    if result.returncode != 0:
+        log(f"failed to chown {path}: {result.stderr.strip()}")
+        return
+    log(f"fixed ownership for {path}")
+
+
+def install_tmux_config() -> None:
+    tmux_dest = Path.home() / ".tmux.conf"
+    if tmux_dest.exists():
+        log(f"skipping tmux config (already exists at {tmux_dest})")
+        return
+
+    tmux_dest.write_text(TMUX_CONFIG, encoding="utf-8")
+    log(f"installed tmux config to {tmux_dest}")
+
+
+def main() -> None:
+    workspace = resolve_workspace()
+    if not is_git_repo(workspace):
+        log(f"skipping git repo checks (no repo at {workspace})")
+
+    install_tmux_config()
+    ensure_dir_ownership(Path("/commandhistory"))
+    ensure_dir_ownership(Path.home() / ".claude")
+    ensure_dir_ownership(Path.home() / ".codex")
+    ensure_dir_ownership(Path.home() / ".amp")
+    ensure_dir_ownership(Path.home() / ".config" / "opencode")
+    ensure_dir_ownership(Path.home() / ".config" / "gh")
+    ensure_global_gitignore(workspace)
+    ensure_codex_config()
+    ensure_claude_config()
+    ensure_amp_config()
+    ensure_opencode_config()
+    install_ai_cookbook_defaults()
+    log("configured defaults for container use")
+
+
+if __name__ == "__main__":
+    main()
