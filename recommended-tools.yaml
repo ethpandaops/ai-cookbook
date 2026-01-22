@@ -6,7 +6,6 @@
 # Core AI development commands that are essential for the team
 commands:
   - parallel-repository-tasks.md
-  - eip.md
 
 # Language-specific coding standards for consistent code quality
 code_standards:
