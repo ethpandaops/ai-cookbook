@@ -675,9 +675,9 @@ class RecommendedToolsInstaller(InteractiveInstaller):
         known_org_tools = {
             # Commands (with .md extension)
             'init-project-ai-docs.md', 'prime-context.md', 'init-component-ai-docs.md',
-            'parallel-repository-tasks.md', 'create-implementation-plan.md', 
+            'parallel-repository-tasks.md', 'create-implementation-plan.md',
             'create-implementation-plan-v2.md', 'create-implementation-plan-v3.md',
-            'review-implementation-plan.md', 'eip.md', 'create-feedback-loop.md',
+            'review-implementation-plan.md', 'create-feedback-loop.md',
             'create-presentation.md', 'prepare-one-shot.md',
             # Code standards (without extension)
             'go', 'python', 'rust', 'tailwindcss',
