@@ -8,13 +8,17 @@
 
 Unless otherwise specified, you MUST use the following packages:
 
-- Logging: `github.com/sirupsen/logrus`
-    - Configure once at the entry point of the application. Pass down the logger to each package via the constructor.
-    - When passing a logger to a method: if ctx is not present, the logger must be the first parameter. If ctx is present, it must be the first parameter, and the logger must be second.
-    - Each package must have a `logrus.FieldLogger` instance passed in via the constructor. The package should add its own fields to its log instance. E.g. `log.WithField("package", "user")`
-    - Use `log.WithField("field", "value")` to add fields to the log instance.
-    - Use `log.WithFields(logrus.Fields{"key": "value", "key2": "value2"})` to add multiple fields to the log instance.
+- Logging (new projects): `log/slog` (standard library)
+    - Configure a `*slog.Logger` at the application entry point with `slog.NewJSONHandler` (or `slog.NewTextHandler` for dev)
+    - Pass `*slog.Logger` to each package via the constructor
+    - Parameter ordering: `ctx` first, then `logger *slog.Logger`
+    - Each package should derive a child logger with `logger.WithGroup("pkgname")` or `logger.With(slog.String("component", "name"))`
+    - Use typed attribute functions: `slog.String()`, `slog.Int()`, `slog.Bool()`, `slog.Any()`
+    - Use context-aware methods: `logger.InfoContext(ctx, ...)`, `logger.ErrorContext(ctx, ...)`
+    - Implement `slog.LogValuer` on types that contain sensitive data to control log output
+    - No Fatal/Panic levels — log at Error level then call `os.Exit(1)` or `panic()` explicitly
     - NEVER log any sensitive information
+- Logging (existing projects using logrus): continue using `github.com/sirupsen/logrus` for consistency. Do not mix logging libraries within the same project. Migration to slog can be done as a dedicated effort.
 - CLI: `github.com/spf13/cobra`
 
 ## Domain-Driven Structure
@@ -75,26 +79,6 @@ p2p/
 ```
 
 **Key: Start with clear interfaces and boundaries. Refactor based on actual needs, not speculation.**
-
-## Required Interface Pattern
-
-Each package represents a cohesive business capability. Related types and implementations should be co-located when they:
-- Share the same lifecycle
-- Change for the same reasons
-- Are always used together
-
-```
-user/
-├── user.go      # Domain logic + client implementation
-├── config.go    # Domain-specific configuration
-└── user_test.go # Domain tests
-
-order/
-├── order.go     # Order service and core types
-├── item.go      # OrderItem logic (tightly coupled)
-├── status.go    # OrderStatus state machine (tightly coupled)
-└── order_test.go
-```
 
 ## Required Interface Pattern
 
