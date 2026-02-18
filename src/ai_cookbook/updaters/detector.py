@@ -136,6 +136,94 @@ class UpdateDetector:
         installed_hash = self._compute_file_hash(installed_file)
         return source_hash != installed_hash
     
+    def reconcile_metadata(self):
+        """Sync metadata with the actual filesystem.
+
+        - Remove stale entries: metadata exists but installed file doesn't
+        - Create missing entries: installed file exists with a matching source but no metadata
+        """
+        changed = False
+
+        # Remove stale entries (metadata points to files that don't exist on disk)
+        stale_keys = []
+        for name, meta in self.metadata.items():
+            if meta.source != 'ethpandaops':
+                continue
+            installed_file = self.install_path / name
+            if not installed_file.exists():
+                stale_keys.append(name)
+                if self._debug:
+                    print(f"[DEBUG] reconcile: removing stale metadata for '{name}' (file missing)")
+
+        for key in stale_keys:
+            del self.metadata[key]
+            changed = True
+
+        # Create missing entries (installed files with matching source but no metadata)
+        if self.source_path.exists() and self.install_path.exists():
+            # Build map of source files keyed by their relative path from source_path
+            source_files = {}
+            for file in self.source_path.rglob('*'):
+                if file.is_file() and file.name != self.METADATA_FILE:
+                    rel_path = str(file.relative_to(self.source_path))
+                    source_files[rel_path] = file
+
+            # Scan installed ethpandaops files
+            dirs_to_scan = []
+            if 'ethpandaops' in str(self.install_path):
+                dirs_to_scan.append(self.install_path)
+            else:
+                ethpandaops_dir = self.install_path / 'ethpandaops'
+                if ethpandaops_dir.exists():
+                    dirs_to_scan.append(ethpandaops_dir)
+
+            for scan_dir in dirs_to_scan:
+                for file_path in scan_dir.rglob('*'):
+                    if not file_path.is_file() or file_path.name == self.METADATA_FILE:
+                        continue
+                    if file_path.suffix == '.bak':
+                        continue
+
+                    rel_to_install = str(file_path.relative_to(self.install_path))
+                    if rel_to_install in self.metadata:
+                        continue
+
+                    # Try to find a matching source file
+                    # For hooks: installed as "gofmt.sh", source is "gofmt/hook.sh"
+                    # For code-standards: installed as "go/CLAUDE.md", source is "go/CLAUDE.md"
+                    matching_source_path = None
+                    matching_source_file = None
+
+                    # Direct match (code-standards style)
+                    if rel_to_install in source_files:
+                        matching_source_path = rel_to_install
+                        matching_source_file = source_files[rel_to_install]
+                    else:
+                        # Hook-style match: "hookname.sh" -> "hookname/hook.sh"
+                        stem = file_path.stem  # e.g. "gofmt"
+                        hook_source_key = f"{stem}/hook.sh"
+                        if hook_source_key in source_files:
+                            matching_source_path = hook_source_key
+                            matching_source_file = source_files[hook_source_key]
+
+                    if matching_source_file:
+                        source_hash = self._compute_file_hash(matching_source_file)
+                        source_mtime = matching_source_file.stat().st_mtime
+                        self.metadata[rel_to_install] = ComponentMetadata(
+                            source='ethpandaops',
+                            source_path=matching_source_path,
+                            source_hash=source_hash,
+                            source_mtime=source_mtime,
+                            installed_at=file_path.stat().st_mtime
+                        )
+                        changed = True
+                        if self._debug:
+                            print(f"[DEBUG] reconcile: created metadata for '{rel_to_install}' "
+                                  f"(source: {matching_source_path})")
+
+        if changed:
+            self._save_metadata()
+
     def check_updates(self, installed_only: bool = True, check_orphaned: bool = True) -> UpdateStatus:
         """Check for available updates.
         
@@ -146,11 +234,14 @@ class UpdateDetector:
         Returns:
             UpdateStatus with lists of changed files
         """
+        # Reconcile metadata with filesystem before checking
+        self.reconcile_metadata()
+
         updated = []
         new = []
         deleted = []
         unchanged = []
-        
+
         # Get all source files
         source_files = {}
         if self.source_path.exists():
