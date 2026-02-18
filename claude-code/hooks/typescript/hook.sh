@@ -3,37 +3,8 @@
 # Read JSON input from stdin
 input=$(cat)
 
-# Extract tool information
-tool_name=$(echo "$input" | jq -r '.tool_name // ""')
-tool_input=$(echo "$input" | jq -r '.tool_input // {}')
-
-# Check if this is a file editing tool
-case "$tool_name" in
-    Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool)
-        ;;
-    *)
-        exit 0
-        ;;
-esac
-
-# Extract file path based on tool type
-file_path=""
-
-case "$tool_name" in
-    Write|Edit|MultiEdit)
-        file_path=$(echo "$tool_input" | jq -r '.file_path // ""')
-        ;;
-    str_replace_editor)
-        # Parse command field for path
-        command=$(echo "$tool_input" | jq -r '.command // ""')
-        if [[ "$command" =~ path=([^ ]+) ]]; then
-            file_path="${BASH_REMATCH[1]}"
-        fi
-        ;;
-    str_replace_based_edit_tool)
-        file_path=$(echo "$tool_input" | jq -r '.path // ""')
-        ;;
-esac
+# Extract file path from tool input (Write and Edit both use file_path)
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')
 
 # Check if we found a file path and it's a TypeScript file
 if [ -z "$file_path" ] || [[ ! "$file_path" =~ \.(ts|tsx)$ ]]; then
@@ -182,9 +153,9 @@ if command -v npx &> /dev/null; then
         tsc_output=$(cd "$config_dir" && eval "$tsc_cmd --pretty false" 2>&1) || true
         
         # Count TypeScript errors
-        error_count=$(echo "$tsc_output" | grep -E "^[^:]+\([0-9]+,[0-9]+\): error TS[0-9]+:" | wc -l | tr -d ' ')
+        error_count=$(echo "$tsc_output" | grep -cE "^[^:]+\([0-9]+,[0-9]+\): error TS[0-9]+:" || true)
         
-        if [ $error_count -gt 0 ]; then
+        if [ "$error_count" -gt 0 ]; then
             stop_reason="tsc found $error_count type errors"
             reason="TypeScript compiler found $error_count type errors. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
 

@@ -2,7 +2,7 @@
 
 This directory contains hooks that can be installed to extend Claude Code's functionality.
 
-Read more: https://docs.anthropic.com/en/docs/claude-code/hooks
+Read more: https://code.claude.com/docs/en/hooks
 
 ## Creating New Hooks
 
@@ -18,7 +18,7 @@ To create a new hook, create a directory with:
   "name": "hook-name",
   "description": "What this hook does",
   "hook_type": "PostToolUse",
-  "matcher": "Write|Edit|MultiEdit",
+  "matcher": "Write|Edit",
   "requirements": {
     "commands": ["required-command"],
     "description": "Human readable requirements"
@@ -39,6 +39,30 @@ Hooks receive JSON input via stdin with this structure:
   },
   "tool_response": {
     // Tool response data
+  }
+}
+```
+
+### Manual Installation
+
+If you prefer to configure hooks manually instead of using the installer, add them to your Claude Code settings file.
+
+**Global** (`~/.claude/settings.json`) or **Local** (`.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/path/to/hook.sh"
+          }
+        ]
+      }
+    ]
   }
 }
 ```

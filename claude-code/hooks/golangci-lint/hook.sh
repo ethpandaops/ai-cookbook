@@ -4,7 +4,8 @@ set -e
 
 # Find golangci-lint config file in current directory or parent directories
 find_golangci_config() {
-    local current_dir="$(pwd)"
+    local current_dir
+    current_dir="$(pwd)"
     
     # Check current directory and walk up to root
     while [[ "$current_dir" != "/" ]]; do
@@ -41,7 +42,7 @@ get_base_revision() {
             echo "HEAD~1"
         else
             # Repository has only one commit, use empty tree
-            echo "$(git hash-object -t tree /dev/null)"
+            git hash-object -t tree /dev/null
         fi
     else
         # Not in a git repo, return empty (will skip --new-from-rev)
@@ -52,20 +53,8 @@ get_base_revision() {
 # Read JSON input from stdin
 input=$(cat)
 
-# Extract file path based on tool type (matching gofmt logic)
-tool_name=$(echo "$input" | jq -r '.tool_name')
-case "$tool_name" in
-    "Write"|"Edit"|"MultiEdit")
-        file_path=$(echo "$input" | jq -r '.tool_input.file_path')
-        ;;
-    "str_replace_editor"|"str_replace_based_edit_tool")
-        file_path=$(echo "$input" | jq -r '.tool_input.command_id // .tool_input.file_path')
-        ;;
-    *)
-        echo "Unknown tool: $tool_name"
-        exit 1
-        ;;
-esac
+# Extract file path from tool input (Write and Edit both use file_path)
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')
 
 # Only process Go files
 if [[ ! "$file_path" =~ \.go$ ]]; then
@@ -85,7 +74,7 @@ package_dir=$(dirname "$file_path")
 cd "$package_dir"
 
 # Check for golangci-lint configuration file
-if ! config_file=$(find_golangci_config); then
+if ! find_golangci_config >/dev/null; then
     # Silent exit when no config file found
     exit 0
 fi
