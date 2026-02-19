@@ -147,22 +147,23 @@ if command -v npx &> /dev/null; then
     
     echo "Found eslint config in: $config_dir" >&2
     
-    # Build the eslint command - npx will handle package manager resolution
-    eslint_cmd="npx eslint --fix \"$file_path\""
+    # Build the eslint command as an argv array to avoid shell re-expansion
+    eslint_cmd=(npx eslint --fix -- "$file_path")
     
     echo "Running eslint command from $config_dir:" >&2
-    echo "  $eslint_cmd" >&2
+    printf "  %q" "${eslint_cmd[@]}" >&2
+    printf "\n" >&2
     
     # Change to the config directory to ensure correct eslint resolution
-    (cd "$config_dir" && eval "$eslint_cmd")
+    eslint_output=$(cd "$config_dir" && "${eslint_cmd[@]}" 2>&1)
     eslint_exit_code=$?
     
     if [ $eslint_exit_code -eq 0 ]; then
+        if [ -n "$eslint_output" ]; then
+            echo "$eslint_output"
+        fi
         echo "Successfully formatted $file_path with eslint from $config_dir"
     else
-        # Capture eslint output for error reporting
-        eslint_output=$(cd "$config_dir" && eval "$eslint_cmd" 2>&1) || true
-        
         if [ $eslint_exit_code -eq 1 ]; then
             # ESLint found linting errors
             issue_count=$(echo "$eslint_output" | grep -cE "^[[:space:]]*[0-9]+:[0-9]+" || true)
