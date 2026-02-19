@@ -402,6 +402,87 @@ func NewService(cfg Config) Service {
 - Replace `interface{}` with `any` type alias
 - Replace type assertions with type switches where appropriate to avoid panics. Throw errors instead.
 
+## File Layout
+
+When creating new Go files or adding declarations to existing files, follow this top-down ordering within each file. You do NOT need to refactor existing files to match this layout, but all new code and new files MUST follow it.
+
+1. **Package clause**
+2. **Imports**
+3. **Constants and package-level variables**
+4. **Exported types** (structs, interfaces), then **unexported types**
+5. **Constructor(s)** (`New...` functions)
+6. **Exported methods** (receiver methods on types)
+7. **Exported functions** (standalone, no receiver)
+8. **Unexported methods** (receiver methods on types)
+9. **Unexported functions** (standalone, no receiver)
+
+When a file contains multiple types, group each type's methods with that type. The overall ordering still applies: exported types before unexported types, and within each type group, exported methods before unexported methods.
+
+### Example
+
+```go
+package diagnostic
+
+import (
+    "regexp"
+    "strings"
+)
+
+const defaultThreshold = 10
+
+var (
+    globalRegistry = make(map[string]string, 16)
+)
+
+// Diagnosis contains the result of pattern matching against a build result.
+type Diagnosis struct {
+    Pattern string
+    Hint    string
+    Score   int
+}
+
+// PatternMatcher matches errors against known patterns to provide diagnostics.
+type PatternMatcher struct {
+    patterns []errorPattern
+}
+
+// errorPattern defines a known error pattern and its corresponding hint.
+type errorPattern struct {
+    regex *regexp.Regexp
+    hint  string
+}
+
+// NewPatternMatcher creates a new matcher with built-in patterns.
+func NewPatternMatcher() *PatternMatcher {
+    return &PatternMatcher{ /* ... */ }
+}
+
+// Match finds the best matching pattern for a build result.
+func (m *PatternMatcher) Match(result *BuildResult) *Diagnosis {
+    // ...
+}
+
+// Reset clears all cached state.
+func (m *PatternMatcher) Reset() {
+    // ...
+}
+
+// FormatDiagnosis returns a human-readable summary.
+func FormatDiagnosis(d *Diagnosis) string {
+    // ...
+}
+
+// calculateMatchScore determines how well a pattern matches the output.
+func (m *PatternMatcher) calculateMatchScore(pattern *errorPattern, lower, original string) int {
+    // ...
+}
+
+// normalizeOutput lowercases and trims whitespace from build output.
+func normalizeOutput(s string) string {
+    // ...
+}
+```
+
 ## Linting
 
 - If the project contains a `.golangci.yml` file, please respect it as best you can.
