@@ -229,6 +229,15 @@ class CodeStandardsInstaller(BaseInstaller):
                 # Continue without backup if backup fails
                 pass
             
+            # Remove metadata entries for this language before deleting files
+            if self.update_detector:
+                keys_to_remove = [
+                    key for key in self.update_detector.metadata
+                    if key.startswith(language + '/')
+                ]
+                for key in keys_to_remove:
+                    self.update_detector.remove_metadata(key)
+
             # Remove language directory
             shutil.rmtree(language_target)
             

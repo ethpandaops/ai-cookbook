@@ -2,7 +2,7 @@
   "name": "gofmt",
   "description": "Automatically format Go files with gofmt after editing",
   "hook_type": "PostToolUse",
-  "matcher": "Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool",
+  "matcher": "Write|Edit",
   "requirements": {
     "commands": ["gofmt"],
     "description": "Requires Go to be installed with gofmt in PATH"

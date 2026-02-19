@@ -134,13 +134,18 @@ The script intelligently handles mode selection:
 
 ### gofmt
 - **Description**: Automatically formats Go files after editing
-- **Trigger**: After Write, Edit, or MultiEdit operations
+- **Trigger**: After Write or Edit operations
 - **Dependencies**: Requires `gofmt` command
 
-### prettier
-- **Description**: Formats JavaScript, TypeScript, CSS, and other web files
-- **Trigger**: After Write, Edit, or MultiEdit operations
-- **Dependencies**: Requires `prettier` command
+### eslint
+- **Description**: Formats and lints JavaScript/TypeScript files
+- **Trigger**: After Write or Edit operations
+- **Dependencies**: Requires `npx` and project-level eslint
+
+### rustfmt
+- **Description**: Formats Rust files with rustfmt
+- **Trigger**: After Write or Edit operations
+- **Dependencies**: Requires `rustfmt` (via rustup)
 
 *Additional hooks can be found in `claude-code/hooks/`*
 
@@ -161,7 +166,7 @@ hook-name/
 {
   "description": "Brief description of what the hook does",
   "hook_type": "PostToolUse",
-  "matcher": "Write|Edit|MultiEdit|str_replace_editor"
+  "matcher": "Write|Edit"
 }
 ```
 
@@ -179,7 +184,7 @@ Example configuration:
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
+        "matcher": "Write|Edit",
         "hooks": [{
           "type": "command",
           "command": "/home/user/.claude/hooks/ethpandaops/gofmt.sh"
@@ -203,10 +208,10 @@ install-hooks.py --install gofmt --local
 
 ### Global Web Development Setup
 
-Install prettier globally for all web projects:
+Install eslint globally for all web projects:
 
 ```bash
-install-hooks.py --install prettier --global
+install-hooks.py --install eslint --global
 ```
 
 ### Audit Hook Installation
@@ -227,7 +232,7 @@ Remove hooks when switching tools:
 
 ```bash
 # Remove from everywhere it's installed
-install-hooks.py --uninstall prettier
+install-hooks.py --uninstall eslint
 
 # Remove all hooks from local project
 cd my-project
@@ -271,7 +276,7 @@ If installed hooks aren't executing:
 2. **Verify dependencies**:
    ```bash
    # Check if required command exists
-   which gofmt  # or prettier, etc.
+   which gofmt  # or rustfmt, etc.
    ```
 
 3. **Check Claude settings**:

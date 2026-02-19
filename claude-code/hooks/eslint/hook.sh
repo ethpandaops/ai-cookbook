@@ -3,37 +3,8 @@
 # Read JSON input from stdin
 input=$(cat)
 
-# Extract tool information
-tool_name=$(echo "$input" | jq -r '.tool_name // ""')
-tool_input=$(echo "$input" | jq -r '.tool_input // {}')
-
-# Check if this is a file editing tool
-case "$tool_name" in
-    Write|Edit|MultiEdit|str_replace_editor|str_replace_based_edit_tool)
-        ;;
-    *)
-        exit 0
-        ;;
-esac
-
-# Extract file path based on tool type
-file_path=""
-
-case "$tool_name" in
-    Write|Edit|MultiEdit)
-        file_path=$(echo "$tool_input" | jq -r '.file_path // ""')
-        ;;
-    str_replace_editor)
-        # Parse command field for path
-        command=$(echo "$tool_input" | jq -r '.command // ""')
-        if [[ "$command" =~ path=([^ ]+) ]]; then
-            file_path="${BASH_REMATCH[1]}"
-        fi
-        ;;
-    str_replace_based_edit_tool)
-        file_path=$(echo "$tool_input" | jq -r '.path // ""')
-        ;;
-esac
+# Extract file path from tool input (Write and Edit both use file_path)
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // ""')
 
 # Check if we found a file path and it's a JavaScript/TypeScript file
 if [ -z "$file_path" ] || [[ ! "$file_path" =~ \.(js|jsx|ts|tsx|mjs|cjs)$ ]]; then
@@ -194,7 +165,7 @@ if command -v npx &> /dev/null; then
         
         if [ $eslint_exit_code -eq 1 ]; then
             # ESLint found linting errors
-            issue_count=$(echo "$eslint_output" | grep -E "^[[:space:]]*[0-9]+:[0-9]+" | wc -l | tr -d ' ')
+            issue_count=$(echo "$eslint_output" | grep -cE "^[[:space:]]*[0-9]+:[0-9]+" || true)
             stop_reason="eslint found $issue_count issues"
             reason="eslint found $issue_count linting issues in $file_path. Review and fix these issues using a subtask if they're not expected, then continue with your original task.
 
