@@ -37,7 +37,7 @@ This file contains the detailed instructions for performing follow-up analysis a
 | Nethermind | `https://github.com/NethermindEth/nethermind.git` |
 | Reth | `https://github.com/paradigmxyz/reth.git` |
 | Erigon | `https://github.com/erigontech/erigon.git` |
-| Besu | `https://github.com/hyperledger/besu.git` |
+| Besu | `https://github.com/besu-eth/besu.git` |
 
 ## Execution Strategy
 

@@ -47,7 +47,7 @@ Examples (Execution Layer repositories):
 - https://github.com/NethermindEth/nethermind
 - https://github.com/paradigmxyz/reth
 - https://github.com/erigontech/erigon
-- https://github.com/hyperledger/besu
+- https://github.com/besu-eth/besu
 
 Enter repositories (one per line, empty line to finish):
 ```
