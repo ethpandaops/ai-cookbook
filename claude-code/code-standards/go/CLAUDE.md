@@ -29,7 +29,8 @@ For new projects:
 For existing projects:
 
 - Continue using the project's logging package or facade, such as a contextual logger built on Logrus. Preserve its structured fields and context propagation. Do not mix logging libraries in the same project as part of an unrelated change.
-- Use `github.com/spf13/cobra` when a command needs Cobra's subcommands, flags, or help generation. Small commands may use the standard `flag` package.
+
+For CLI entry points, use `github.com/spf13/cobra` when a command needs Cobra's subcommands, flags, or help generation. Small commands may use the standard `flag` package.
 
 ## Package design
 
@@ -114,7 +115,7 @@ Plain domain values and stateless services do not need `Start` or `Stop` methods
 - Functions that perform request-scoped I/O or blocking work should accept `context.Context` as their first parameter.
 - Propagate the caller's context through the call stack.
 - Avoid storing request contexts in structs. A component may store its own derived lifecycle context, and an asynchronous queue may retain a detached context containing only required propagation state.
-- Document any stored-context exception, preserve only the state that must cross the asynchronous boundary, and ensure the component cancels or releases it during shutdown.
+- Document any stored-context exception, preserve only the state that must cross the asynchronous boundary, and ensure the component cancels or releases it during shutdown. When the repository enables the `containedctx` linter, these documented exceptions warrant a specific, explained `//nolint:containedctx` directive.
 - Do not pass `nil` contexts; use `context.Background()` only when there is no meaningful parent.
 - Long-running operations must observe cancellation at points where they can stop safely.
 
@@ -235,8 +236,7 @@ Modules declaring Go 1.22 or later create new loop variables for each iteration,
 
 ### Concurrency validation
 
-- Run race-enabled tests for packages whose changed code uses concurrency while iterating.
-- Run `go test -race ./...` in CI for Go changes. If platform constraints make that impossible, document the narrower race-testing scope in the repository.
+- Run race-enabled tests for packages whose changed code uses concurrency while iterating. Repository-wide race coverage belongs in the pull request checks below.
 - Test cancellation, early returns, closed channels, and shutdown paths.
 - Use synchronization in tests instead of sleeps where possible.
 - Profile before adding concurrency or tuning buffer sizes.
@@ -311,12 +311,14 @@ For new repositories, use the active ethPandaOps GolangCI-Lint configuration as 
 - project style checks such as `decorder`, `prealloc`, `nolintlint`, `whitespace`, and `wsl_v5`
 - specific, explained `//nolint` directives for intentional exceptions
 
+This list is a snapshot. When it disagrees with the Xatu GolangCI-Lint configuration linked in the references, the linked configuration is authoritative.
+
 ## Pull request checks
 
 Go repositories should run these checks for pull requests that change Go code or module files:
 
 1. Run `go mod tidy` and `go mod verify`, then fail if `go.mod` or `go.sum` changed unexpectedly.
-2. Run `go test -race ./...` with a repository-appropriate timeout.
+2. Run `go test -race ./...` with a repository-appropriate timeout. If platform constraints make the race detector unavailable, document the narrower race-testing scope in the repository.
 3. Run the pinned GolangCI-Lint version against new code using the pull request's actual merge base.
 4. Exercise the production build or release path used by the repository.
 5. Run `govulncheck ./...`, with temporary advisory exceptions documented in CI and removed when fixes become available.
