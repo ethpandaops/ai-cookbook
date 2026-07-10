@@ -1,489 +1,332 @@
-# Golang Package Standards
+# Go standards
 
-## Dependencies
-- Minimum Go version: 1.23.0
-- External dependencies managed through go modules
+## Scope and precedence
 
-## Library Packages
+- Treat the repository's `go.mod`, existing conventions, generated-code policy, and tool configuration as authoritative.
+- For new projects, use the Go version supported by the organization's current build and release toolchain. Pin it consistently in `go.mod`, CI, and build images.
+- Do not change a repository's Go version as part of an unrelated task.
+- Apply these standards to new and modified code. Avoid unrelated churn in existing files.
+- Prefer the standard library. Add a dependency when it materially simplifies the implementation and the repository does not already provide an equivalent.
 
-Unless otherwise specified, you MUST use the following packages:
+## Tooling
 
-- Logging (new projects): `log/slog` (standard library)
-    - Configure a `*slog.Logger` at the application entry point with `slog.NewJSONHandler` (or `slog.NewTextHandler` for dev)
-    - Pass `*slog.Logger` to each package via the constructor
-    - Parameter ordering: `ctx` first, then `logger *slog.Logger`
-    - Each package should derive a child logger with `logger.WithGroup("pkgname")` or `logger.With(slog.String("component", "name"))`
-    - Use typed attribute functions: `slog.String()`, `slog.Int()`, `slog.Bool()`, `slog.Any()`
-    - Use context-aware methods: `logger.InfoContext(ctx, ...)`, `logger.ErrorContext(ctx, ...)`
-    - Implement `slog.LogValuer` on types that contain sensitive data to control log output
-    - No Fatal/Panic levels — log at Error level then call `os.Exit(1)` or `panic()` explicitly
-    - NEVER log any sensitive information
-- Logging (existing projects using logrus): continue using `github.com/sirupsen/logrus` for consistency. Do not mix logging libraries within the same project. Migration to slog can be done as a dedicated effort.
-- CLI: `github.com/spf13/cobra`
+- Format Go code with `gofmt` and `goimports`. Prefer the repository's formatter command when it provides one.
+- Run the narrowest relevant tests while iterating, then the repository's required validation before finishing.
+- Respect the repository's `go.work`, build tags, code-generation steps, and CI commands.
 
-## Domain-Driven Structure
+## Logging and CLI packages
 
-Each package represents a cohesive business capability. Related types and implementations should be co-located when they:
-- Share the same lifecycle
-- Change for the same reasons
-- Are always used together
+For new projects:
 
-```
+- Use `log/slog` for structured logging.
+- Configure the root logger at the application entry point with `slog.NewJSONHandler`, or `slog.NewTextHandler` for local development.
+- Pass `*slog.Logger` to long-lived components through their constructors. Derive a component logger with `logger.WithGroup("pkgname")` or a structured component attribute.
+- Use typed attributes such as `slog.String`, `slog.Int`, `slog.Bool`, and `slog.Any` when they improve type safety or readability.
+- Use context-aware logging methods when a request context is available.
+- Never log secrets, credentials, private keys, tokens, or sensitive payloads. Implement `slog.LogValuer` when a type needs to control its logged representation.
+- Log fatal conditions at error level, then return the error to `main` or exit explicitly. Do not hide control flow in logging helpers.
+
+For existing projects:
+
+- Continue using the project's logging package or facade, such as a contextual logger built on Logrus. Preserve its structured fields and context propagation. Do not mix logging libraries in the same project as part of an unrelated change.
+
+For CLI entry points, use `github.com/spf13/cobra` when a command needs Cobra's subcommands, flags, or help generation. Small commands may use the standard `flag` package.
+
+## Package design
+
+Package code by cohesion. Types and functions that share a lifecycle and change for the same reason usually belong in the same package.
+
+Start with files in one package:
+
+```text
 user/
-├── user.go      # Domain logic + client implementation
-├── config.go    # Domain-specific configuration
-└── user_test.go # Domain tests
-
-order/
-├── order.go     # Order service and core types
-├── item.go      # OrderItem logic (tightly coupled)
-├── status.go    # OrderStatus state machine (tightly coupled)
-└── order_test.go
+├── user.go
+├── config.go
+└── user_test.go
 ```
 
-## Layered Package Architecture
+Create a subpackage when it has a distinct responsibility, can be used independently, or benefits from a separate dependency and test boundary:
 
-### When to Use Layers
-
-Create sub-packages when components:
-- Have different reasons to change
-- Could be used independently
-- Need separate testing boundaries
-
-Otherwise, use files within a single package.
-
-### Dependency Rules
-
-```
+```text
 node/
-├── node.go      # Orchestrates child packages
-├── p2p/         # Child package (if needed)
-└── api/         # Child package (if needed)
+├── node.go
+├── p2p/
+└── api/
 ```
 
-If siblings need to communicate, the parent must orchestrate this.
+Parent packages should orchestrate sibling packages rather than creating circular or sideways dependencies. Avoid speculative package splits.
 
-### Example: When to Split vs. Keep Together
+Names such as `util`, `common`, `helper`, `model`, and `types` often become unrelated grab bags. Prefer a name that describes the capability. A generic-looking filename is acceptable when its contents are cohesive and the name is already conventional in the repository.
+
+## Interfaces and constructors
+
+- Return a concrete type from constructors by default.
+- Define an interface where it is consumed, once the consumer needs more than one implementation or a test boundary.
+- Keep interfaces small and focused on the behavior the consumer uses.
+- Do not create an interface only to mock the implementation that sits beside it.
+- Use compile-time interface checks when an implementation intentionally promises to satisfy an external interface:
 
 ```go
-// Split: Independent components
-node/
-├── p2p/         # Could be its own library
-└── api/         # Could serve different p2p impls
-
-// Together: Tightly coupled logic
-p2p/
-├── p2p.go       # Main logic
-├── reqresp.go   # Just another file
-└── pubsub.go    # Just another file
+var _ http.Handler = (*Handler)(nil)
 ```
 
-**Key: Start with clear interfaces and boundaries. Refactor based on actual needs, not speculation.**
-
-## Required Interface Pattern
-
-Every domain package MUST:
-
-1. Define a public interface (e.g., `UserService`)
-2. Provide `NewUserService()` constructor that:
-   - Returns the interface, not the struct
-   - Does minimal initialization only
-3. Implement lifecycle methods:
-   - `Start(ctx context.Context) error` - Heavy initialization here
-   - `Stop() error` - Cleanup
-
-Additionally:
-
-- You almost never need a pointer to an interface. You should be passing interfaces as values—the underlying data can still be a pointer.
-- Always verify interface compliance at compile time where appropriate, eg: `var _ http.Handler = (*Handler)(nil)`
-
-## Initialising
-
-You must:
-- Prefer `make(..)` for empty maps and maps populated dynamically.
-- Always provide capacity hints when initializing maps with `make()`
-- Always provide capacity hints when initializing slices with `make()`, particularly when appending.
-
-## Context Propagation
-
-- All methods that do I/O or can block MUST accept `context.Context` as first parameter
-- Context should flow through the entire call stack
-- Avoid storing context in structs
-- Implement context cancellation handling for long operations
-
-## Concurrency Guidelines
-
-### Core Principles
-
-- **Concurrency is not parallelism**: Design for concurrent execution, let the runtime handle parallelism
-- **Share memory by communicating**: Prefer channels over shared memory with mutexes
-- **Don't communicate by sharing memory**: Avoid complex mutex-based designs when channels are clearer
-
-### Goroutine Management
-
-#### Lifecycle Control
-```go
-// Always know when and how goroutines terminate
-type Worker struct {
-    done chan struct{}
-    wg   sync.WaitGroup
-}
-
-func (w *Worker) Start(ctx context.Context) error {
-    w.wg.Add(1)
-    go func() {
-        defer w.wg.Done()
-        for {
-            select {
-            case <-ctx.Done():
-                return
-            case <-w.done:
-                return
-            default:
-                // Do work
-            }
-        }
-    }()
-    return nil
-}
-
-func (w *Worker) Stop() error {
-    close(w.done)
-    w.wg.Wait()
-    return nil
-}
-```
-
-#### Goroutine Leaks Prevention
-- **Never start a goroutine without knowing how it will stop**
-- **Always provide a way to signal goroutine termination**
-- **Use context or done channels for cancellation**
-- **Wait for goroutines to complete before returning**
-
-### Channel Patterns
-
-#### Channel Design Rules
-- **Ownership**: The goroutine that creates a channel should close it
-- **Direction**: Use directional channels in function signatures
-- **Nil channels**: Leverage nil channel behavior in select statements
-- **Buffering**: Only buffer when you have a measurable performance need
-
-#### Common Patterns
+- Pass interface values directly. Pointers to interfaces are almost never needed.
 
 ```go
-// Fan-out pattern
-func fanOut(ctx context.Context, in <-chan int, workers int) []<-chan int {
-    outs := make([]<-chan int, workers)
-    for i := 0; i < workers; i++ {
-        out := make(chan int)
-        outs[i] = out
-        go func() {
-            defer close(out)
-            for val := range in {
-                select {
-                case out <- val * 2:
-                case <-ctx.Done():
-                    return
-                }
-            }
-        }()
-    }
-    return outs
-}
-
-// Timeout pattern
-func doWithTimeout(ctx context.Context, timeout time.Duration) error {
-    ctx, cancel := context.WithTimeout(ctx, timeout)
-    defer cancel()
-
-    done := make(chan struct{})
-    go func() {
-        defer close(done)
-        // Do work
-    }()
-
-    select {
-    case <-done:
-        return nil
-    case <-ctx.Done():
-        return ctx.Err()
-    }
-}
-```
-
-### Synchronization Primitives
-
-#### When to Use What
-- **Channels**: For passing ownership, signaling, or when the communication itself is important
-- **Mutexes**: For protecting shared state when channels would add unnecessary complexity
-- **Atomic operations**: For simple counters and flags
-- **sync.Once**: For one-time initialization
-- **WaitGroups**: For waiting on a collection of goroutines
-
-#### Mutex Guidelines
-```go
-// Always defer unlock immediately after lock
-type Cache struct {
-    mu    sync.RWMutex
-    items map[string]any
-}
-
-func (c *Cache) Get(key string) (any, bool) {
-    c.mu.RLock()
-    defer c.mu.RUnlock()
-    val, ok := c.items[key]
-    return val, ok
-}
-
-func (c *Cache) Set(key string, val any) {
-    c.mu.Lock()
-    defer c.mu.Unlock()
-    c.items[key] = val
-}
-```
-
-### Error Handling in Concurrent Code
-
-```go
-// Use errgroup for concurrent operations that can fail
-func processItems(ctx context.Context, items []string) error {
-    g, ctx := errgroup.WithContext(ctx)
-
-    // Limit concurrency
-    sem := make(chan struct{}, 10)
-
-    for _, item := range items {
-        item := item // Capture loop variable
-        g.Go(func() error {
-            select {
-            case sem <- struct{}{}:
-                defer func() { <-sem }()
-            case <-ctx.Done():
-                return ctx.Err()
-            }
-            return processItem(ctx, item)
-        })
-    }
-
-    return g.Wait()
-}
-```
-
-### Race Condition Prevention
-
-- **Always run tests with `-race` flag**
-- **Never access shared memory without synchronization**
-- **Use `go vet` to catch common concurrency mistakes**
-- **Design APIs that make races impossible**
-
-```go
-// Bad: Racy counter
-type Counter struct {
-    value int
-}
-func (c *Counter) Inc() { c.value++ } // RACE!
-
-// Good: Safe counter
-type Counter struct {
-    value atomic.Int64
-}
-func (c *Counter) Inc() { c.value.Add(1) }
-```
-
-### Performance Considerations
-
-- **Don't create goroutines for very small tasks**: The overhead may exceed the benefit
-- **Limit concurrency**: Use worker pools or semaphores to prevent resource exhaustion
-- **Batch work**: Process items in batches rather than one at a time
-- **Profile before optimizing**: Use pprof to identify actual bottlenecks
-
-```go
-// Worker pool pattern
-func workerPool(ctx context.Context, jobs <-chan Job, workers int) {
-    var wg sync.WaitGroup
-
-    for i := 0; i < workers; i++ {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            for {
-                select {
-                case job, ok := <-jobs:
-                    if !ok {
-                        return
-                    }
-                    processJob(ctx, job)
-                case <-ctx.Done():
-                    return
-                }
-            }
-        }()
-    }
-
-    wg.Wait()
-}
-```
-
-### Testing Concurrent Code
-
-- **Test with multiple GOMAXPROCS values**: `go test -cpu=1,2,4,8`
-- **Must use race detector**: `go test -race`
-- **Test cancellation paths**: Ensure goroutines stop when expected
-- **Test timeout scenarios**: Verify behavior under time pressure
-- **Use sync.WaitGroup in tests**: Ensure all goroutines complete
-
-```go
-func TestConcurrentOperation(t *testing.T) {
-    // Test with different levels of concurrency
-    for _, workers := range []int{1, 2, 10, 100} {
-        t.Run(fmt.Sprintf("workers-%d", workers), func(t *testing.T) {
-            ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-            defer cancel()
-
-            // Run test with race detector enabled
-            result := runConcurrentOperation(ctx, workers)
-            require.NoError(t, result)
-        })
-    }
-}
-```
-
-## Testing Standards
-
-- Utilise table-driven tests for multiple scenarios.
-- Use `testify/assert` or `testify/require` for assertions.
-- Mock interfaces, not implementations.
-- Aim for 70% test coverage of critical code-paths.
-
-## Naming Rules
-
-- NO package stuttering: `user.User` not `user.UserUser`
-- NO generic packages: `types/`, `utils/`, `common/`, `models/`, `helpers/`
-- NO generic files: `helpers.go`, `utils.go`, `types.go`
-
-### Example
-
-```go
-// user/user.go
 package user
 
-type Service interface {
-    Start(ctx context.Context) error
-    Stop() error
-    GetUser(id string) (*User, error)
+type Service struct {
+	store  Store
+	logger *slog.Logger
 }
 
-type User struct {
-    ID   string
-    Name string
-}
-
-func NewService(cfg Config) Service {
-    return &service{cfg: cfg}
+func NewService(store Store, logger *slog.Logger) *Service {
+	return &Service{
+		store:  store,
+		logger: logger.WithGroup("user"),
+	}
 }
 ```
 
-**Key: Package by cohesion - types, functions, and helpers that change together belong together.**
+The `Store` interface belongs in the package that consumes it. The package implementing the backing store should normally return its concrete client.
 
-### Error Handling
-- No errors are to be left unchecked.
-- Wrap errors with context using `fmt.Errorf` with `%w` verb
-- Create custom error types when needed for error handling logic
-- Log errors at appropriate levels (debug, info, warn, error)
-- Return errors with proper context information (line, position)
-- Use `errors.Is()` and `errors.As()` for error checking
+## Lifecycle methods
 
-## Style
+Add lifecycle methods only to components that own resources or background work.
 
-- Avoid overly long lines; aim for a soft line length limit of 99 characters.
-- Always group similar dependencies/imports, ensuring they are ordered by standard library, followed by everything else.
-- Follow standard Go conventions
-- Add proper docstring comments for exported functions and types
-- Replace `interface{}` with `any` type alias
-- Replace type assertions with type switches where appropriate to avoid panics. Throw errors instead.
+- Constructors should validate dependencies and perform cheap initialization.
+- Use `Start` only when a component has meaningful work that cannot begin in the constructor.
+- Prefer `Start(ctx context.Context) error` and `Stop(ctx context.Context) error` for managed components so parent packages can orchestrate them consistently.
+- Use `Close`, `Stop`, or `Shutdown` according to the resource and existing repository conventions.
+- Accept a context for shutdown when cleanup can block or needs a deadline.
+- Make cleanup safe to call more than once when practical, and document when it is not.
 
-## File Layout
+Plain domain values and stateless services do not need `Start` or `Stop` methods.
 
-When creating new Go files or adding declarations to existing files, follow this top-down ordering within each file. You do NOT need to refactor existing files to match this layout, but all new code and new files MUST follow it.
+## Initialization
 
-1. **Package clause**
-2. **Imports**
-3. **Constants and package-level variables**
-4. **Exported types** (structs, interfaces), then **unexported types**
-5. **Constructor(s)** (`New...` functions)
-6. **Exported methods** (receiver methods on types)
-7. **Exported functions** (standalone, no receiver)
-8. **Unexported methods** (receiver methods on types)
-9. **Unexported functions** (standalone, no receiver)
+- Prefer useful zero values and composite literals for simple initialization.
+- Use `make` for maps and slices populated dynamically.
+- Supply a capacity when the expected size is known or profiling shows that preallocation matters. Do not invent a capacity merely to satisfy a style rule.
+- Keep constructors free of hidden goroutines and network I/O unless their contract clearly says otherwise.
 
-When a file contains multiple types, group each type's methods with that type. The overall ordering still applies: exported types before unexported types, and within each type group, exported methods before unexported methods.
+## Context propagation
 
-### Example
+- Functions that perform request-scoped I/O or blocking work should accept `context.Context` as their first parameter.
+- Propagate the caller's context through the call stack.
+- Avoid storing request contexts in structs. A component may store its own derived lifecycle context, and an asynchronous queue may retain a detached context containing only required propagation state.
+- Document any stored-context exception, preserve only the state that must cross the asynchronous boundary, and ensure the component cancels or releases it during shutdown. When the repository enables the `containedctx` linter, these documented exceptions warrant a specific, explained `//nolint:containedctx` directive.
+- Do not pass `nil` contexts; use `context.Background()` only when there is no meaningful parent.
+- Long-running operations must observe cancellation at points where they can stop safely.
+
+## Concurrency
+
+### Goroutine ownership
+
+- Do not start a goroutine without deciding how it stops and who waits for it.
+- Prefer structured lifetimes: start goroutines inside a component and stop them before the component is released.
+- Keep cancellation, error propagation, and cleanup visible in the API.
 
 ```go
-package diagnostic
+type Job func(context.Context) error
 
-import (
-    "regexp"
-    "strings"
-)
-
-const defaultThreshold = 10
-
-var (
-    globalRegistry = make(map[string]string, 16)
-)
-
-// Diagnosis contains the result of pattern matching against a build result.
-type Diagnosis struct {
-    Pattern string
-    Hint    string
-    Score   int
-}
-
-// PatternMatcher matches errors against known patterns to provide diagnostics.
-type PatternMatcher struct {
-    patterns []errorPattern
-}
-
-// errorPattern defines a known error pattern and its corresponding hint.
-type errorPattern struct {
-    regex *regexp.Regexp
-    hint  string
-}
-
-// NewPatternMatcher creates a new matcher with built-in patterns.
-func NewPatternMatcher() *PatternMatcher {
-    return &PatternMatcher{ /* ... */ }
-}
-
-// Match finds the best matching pattern for a build result.
-func (m *PatternMatcher) Match(result *BuildResult) *Diagnosis {
-    // ...
-}
-
-// Reset clears all cached state.
-func (m *PatternMatcher) Reset() {
-    // ...
-}
-
-// FormatDiagnosis returns a human-readable summary.
-func FormatDiagnosis(d *Diagnosis) string {
-    // ...
-}
-
-// calculateMatchScore determines how well a pattern matches the output.
-func (m *PatternMatcher) calculateMatchScore(pattern *errorPattern, lower, original string) int {
-    // ...
-}
-
-// normalizeOutput lowercases and trims whitespace from build output.
-func normalizeOutput(s string) string {
-    // ...
+func runWorker(ctx context.Context, jobs <-chan Job) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case job, ok := <-jobs:
+			if !ok {
+				return nil
+			}
+			if err := job(ctx); err != nil {
+				return err
+			}
+		}
+	}
 }
 ```
 
-## Linting
+The owner can run this loop in an `errgroup`, cancel the group context to stop it, and wait for the group before releasing dependencies. Jobs must also observe the context when they block.
 
-- If the project contains a `.golangci.yml` file, please respect it as best you can.
-- `golangci-lint` is our preferred linter and if executed, should always be done so with the `--new-from-rev="origin/master"` flag to ensure only your changes are linted.
+### Channels
+
+- The sending side owns closing a data channel after all sends have finished. Receivers should not close channels they do not own.
+- Use directional channel types in function signatures where they clarify ownership.
+- Choose buffer sizes from semantics: expected bursts, backpressure, bounded work, or a measured performance need.
+- Use nil channels deliberately, usually to disable a `select` case. Add a comment if the behavior is not obvious.
+- Make both sends and receives cancellation-aware when either side may stop early.
+
+```go
+func fanOut(ctx context.Context, in <-chan int, workers int) []<-chan int {
+	outs := make([]<-chan int, workers)
+
+	for i := 0; i < workers; i++ {
+		out := make(chan int)
+		outs[i] = out
+
+		go func() {
+			defer close(out)
+
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case value, ok := <-in:
+					if !ok {
+						return
+					}
+
+					select {
+					case out <- value * 2:
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}()
+	}
+
+	return outs
+}
+```
+
+### Timeouts
+
+Timeouts are cooperative. The work must receive and observe the derived context; wrapping uncancellable work in a goroutine can leak it after the timeout.
+
+```go
+func doWithTimeout(ctx context.Context, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	return doWork(ctx)
+}
+```
+
+### Synchronization
+
+- Use channels for ownership transfer, work distribution, and signals.
+- Use mutexes for protecting shared state when a channel would obscure the design.
+- Use atomics for simple independent counters or flags, not multi-field invariants.
+- Use `sync.Once` for one-time transitions and `sync.WaitGroup` for goroutine completion.
+- Keep critical sections small. `defer mu.Unlock()` is a good default when the lock should be held until the function or small scope returns; unlock explicitly when holding it longer would block unrelated work.
+- Never access shared mutable state without synchronization.
+
+### Concurrent errors
+
+Use `errgroup.WithContext` when a set of related goroutines should cancel on the first error. Limit concurrency when the input can be large.
+
+```go
+func processItems(ctx context.Context, items []string) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(10)
+
+	for _, item := range items {
+		g.Go(func() error {
+			return processItem(ctx, item)
+		})
+	}
+
+	return g.Wait()
+}
+```
+
+Modules declaring Go 1.22 or later create new loop variables for each iteration, so an extra `item := item` assignment is not needed. Follow the language version declared in `go.mod` when working in an older module.
+
+### Concurrency validation
+
+- Run race-enabled tests for packages whose changed code uses concurrency while iterating. Repository-wide race coverage belongs in the pull request checks below.
+- Test cancellation, early returns, closed channels, and shutdown paths.
+- Use synchronization in tests instead of sleeps where possible.
+- Profile before adding concurrency or tuning buffer sizes.
+
+## Testing
+
+- Use the standard `testing` package by default.
+- Use table-driven tests when several cases share the same setup and assertion structure.
+- Test observable behavior, error identity, and boundary conditions.
+- Prefer small fakes or consumer-side interfaces to mocks of concrete implementations.
+- Continue using `testify/assert` or `testify/require` when the repository already uses Testify; do not add it solely for simple assertions.
+- Treat coverage as a diagnostic, not a target. Prioritize critical paths and failure behavior over a repository-wide percentage.
+- Keep tests deterministic and safe to run in parallel before calling `t.Parallel()`.
+
+## Naming
+
+- Avoid package stuttering: prefer `user.Service` over `user.UserService` when the shorter name remains clear.
+- Use standard initialisms consistently: `ID`, `URL`, `HTTP`, and `RPC`.
+- Name functions for the behavior they provide, not their implementation mechanism.
+- Keep package names short, lowercase, and specific.
+- Follow established repository terminology even when another name might be marginally better.
+
+## Error handling
+
+- Check returned errors. A deliberately ignored error should be safe and obvious; add a comment when the reason is not clear.
+- Wrap errors with useful operation or resource context using `fmt.Errorf("...: %w", err)`.
+- Keep error text lowercase unless it begins with a proper noun or identifier.
+- Use `errors.Is` and `errors.As` instead of matching error strings.
+- Add sentinel or custom error types only when callers need to branch on error identity or data.
+- Log or return an error at the appropriate boundary; avoid logging the same error at every layer and then returning it.
+- Include relevant domain context such as an operation or identifier. Source line numbers usually do not belong in user-facing errors.
+
+## Style and documentation
+
+- Follow `gofmt`; do not enforce a separate hard line-length limit. Refactor expressions that are difficult to read.
+- Let `gofmt` or `goimports` organize imports. Preserve extra import groups only when the repository uses them consistently.
+- Use `any` instead of `interface{}` in code whose declared Go version supports it.
+- Use a comma-ok type assertion for one expected type. Use a type switch when handling several possible types.
+- Write doc comments for exported APIs in public packages and wherever repository linting requires them. Use the declaration name near the start when it reads naturally.
+- Comments should explain intent, invariants, or non-obvious tradeoffs rather than restating the code.
+
+## File layout
+
+Go does not require a universal declaration order. Optimize files for reading and keep related declarations close together.
+
+A common starting point is:
+
+1. Package documentation and clause
+2. Imports
+3. Related constants and variables
+4. Types and their constructors
+5. Methods and functions in a logical reading order
+
+For files with several types, keeping each type's constructor and methods together is often clearer than grouping every exported declaration ahead of every unexported declaration. Follow the surrounding package and do not reorder existing code solely to satisfy this preference.
+
+When the repository enables a declaration-order linter such as `decorder`, its configured order is authoritative. Do not add extra exported-before-unexported ordering rules that the formatter or linter does not enforce.
+
+## Linting and validation
+
+- Respect the repository's GolangCI-Lint configuration and invocation.
+- Run `golangci-lint run` from the module or workspace location expected by the project.
+- When linting only changed code, compare against the repository's actual default or merge-base branch. Do not assume it is named `master`.
+- Run `go vet` and `go test` through the project's existing scripts or CI targets when available.
+- Do not hand-edit generated files. Regenerate them with the repository's documented command.
+
+For new repositories, use the active ethPandaOps GolangCI-Lint configuration as the starting profile. The baseline should include:
+
+- `gofmt` and `goimports` formatters
+- correctness checks such as `errcheck`, `govet`, `staticcheck`, `ineffassign`, and `unused`
+- concurrency and context checks such as `copyloopvar` and `containedctx`
+- security and API checks such as `gosec`, `bodyclose`, and `exhaustive`
+- project style checks such as `decorder`, `prealloc`, `nolintlint`, `whitespace`, and `wsl_v5`
+- specific, explained `//nolint` directives for intentional exceptions
+
+This list is a snapshot. When it disagrees with the Xatu GolangCI-Lint configuration linked in the references, the linked configuration is authoritative.
+
+## Pull request checks
+
+Go repositories should run these checks for pull requests that change Go code or module files:
+
+1. Run `go mod tidy` and `go mod verify`, then fail if `go.mod` or `go.sum` changed unexpectedly.
+2. Run `go test -race ./...` with a repository-appropriate timeout. If platform constraints make the race detector unavailable, document the narrower race-testing scope in the repository.
+3. Run the pinned GolangCI-Lint version against new code using the pull request's actual merge base.
+4. Exercise the production build or release path used by the repository.
+5. Run `govulncheck ./...`, with temporary advisory exceptions documented in CI and removed when fixes become available.
+
+## References
+
+- [Go code review comments](https://go.dev/wiki/CodeReviewComments)
+- [Go doc comments](https://go.dev/doc/comment)
+- [Go concurrency patterns: pipelines and cancellation](https://go.dev/blog/pipelines)
+- [Xatu GolangCI-Lint configuration](https://github.com/ethpandaops/xatu/blob/master/.golangci.yml)
+- [Xatu Go test workflow](https://github.com/ethpandaops/xatu/blob/master/.github/workflows/test.yaml)
