@@ -3,13 +3,14 @@
 ## Scope and precedence
 
 - Treat the repository's `go.mod`, existing conventions, generated-code policy, and tool configuration as authoritative.
-- The minimum supported language version is Go 1.23. Do not change a repository's Go version as part of an unrelated task.
+- For new projects, use the Go version supported by the organization's current build and release toolchain. Pin it consistently in `go.mod`, CI, and build images.
+- Do not change a repository's Go version as part of an unrelated task.
 - Apply these standards to new and modified code. Avoid unrelated churn in existing files.
 - Prefer the standard library. Add a dependency when it materially simplifies the implementation and the repository does not already provide an equivalent.
 
 ## Tooling
 
-- Format Go code with `gofmt`. Use `goimports` when the repository already uses it.
+- Format Go code with `gofmt` and `goimports`. Prefer the repository's formatter command when it provides one.
 - Run the narrowest relevant tests while iterating, then the repository's required validation before finishing.
 - Respect the repository's `go.work`, build tags, code-generation steps, and CI commands.
 
@@ -27,7 +28,7 @@ For new projects:
 
 For existing projects:
 
-- Continue using the project's logging package. Do not mix logging libraries in the same project as part of an unrelated change.
+- Continue using the project's logging package or facade, such as a contextual logger built on Logrus. Preserve its structured fields and context propagation. Do not mix logging libraries in the same project as part of an unrelated change.
 - Use `github.com/spf13/cobra` when a command needs Cobra's subcommands, flags, or help generation. Small commands may use the standard `flag` package.
 
 ## Package design
@@ -94,6 +95,7 @@ Add lifecycle methods only to components that own resources or background work.
 
 - Constructors should validate dependencies and perform cheap initialization.
 - Use `Start` only when a component has meaningful work that cannot begin in the constructor.
+- Prefer `Start(ctx context.Context) error` and `Stop(ctx context.Context) error` for managed components so parent packages can orchestrate them consistently.
 - Use `Close`, `Stop`, or `Shutdown` according to the resource and existing repository conventions.
 - Accept a context for shutdown when cleanup can block or needs a deadline.
 - Make cleanup safe to call more than once when practical, and document when it is not.
@@ -111,7 +113,8 @@ Plain domain values and stateless services do not need `Start` or `Stop` methods
 
 - Functions that perform request-scoped I/O or blocking work should accept `context.Context` as their first parameter.
 - Propagate the caller's context through the call stack.
-- Do not store request contexts in structs.
+- Avoid storing request contexts in structs. A component may store its own derived lifecycle context, and an asynchronous queue may retain a detached context containing only required propagation state.
+- Document any stored-context exception, preserve only the state that must cross the asynchronous boundary, and ensure the component cancels or releases it during shutdown.
 - Do not pass `nil` contexts; use `context.Background()` only when there is no meaningful parent.
 - Long-running operations must observe cancellation at points where they can stop safely.
 
@@ -157,7 +160,7 @@ The owner can run this loop in an `errgroup`, cancel the group context to stop i
 func fanOut(ctx context.Context, in <-chan int, workers int) []<-chan int {
 	outs := make([]<-chan int, workers)
 
-	for i := range workers {
+	for i := 0; i < workers; i++ {
 		out := make(chan int)
 		outs[i] = out
 
@@ -228,11 +231,12 @@ func processItems(ctx context.Context, items []string) error {
 }
 ```
 
-Go 1.22 and later create new loop variables for each iteration, so an extra `item := item` assignment is not needed for modules using the supported Go version.
+Modules declaring Go 1.22 or later create new loop variables for each iteration, so an extra `item := item` assignment is not needed. Follow the language version declared in `go.mod` when working in an older module.
 
 ### Concurrency validation
 
-- Run `go test -race` for packages whose changed code uses concurrency. Include race-enabled tests in CI where the runtime cost is acceptable.
+- Run race-enabled tests for packages whose changed code uses concurrency while iterating.
+- Run `go test -race ./...` in CI for Go changes. If platform constraints make that impossible, document the narrower race-testing scope in the repository.
 - Test cancellation, early returns, closed channels, and shutdown paths.
 - Use synchronization in tests instead of sleeps where possible.
 - Profile before adding concurrency or tuning buffer sizes.
@@ -288,6 +292,8 @@ A common starting point is:
 
 For files with several types, keeping each type's constructor and methods together is often clearer than grouping every exported declaration ahead of every unexported declaration. Follow the surrounding package and do not reorder existing code solely to satisfy this preference.
 
+When the repository enables a declaration-order linter such as `decorder`, its configured order is authoritative. Do not add extra exported-before-unexported ordering rules that the formatter or linter does not enforce.
+
 ## Linting and validation
 
 - Respect the repository's GolangCI-Lint configuration and invocation.
@@ -296,8 +302,29 @@ For files with several types, keeping each type's constructor and methods togeth
 - Run `go vet` and `go test` through the project's existing scripts or CI targets when available.
 - Do not hand-edit generated files. Regenerate them with the repository's documented command.
 
+For new repositories, use the active ethPandaOps GolangCI-Lint configuration as the starting profile. The baseline should include:
+
+- `gofmt` and `goimports` formatters
+- correctness checks such as `errcheck`, `govet`, `staticcheck`, `ineffassign`, and `unused`
+- concurrency and context checks such as `copyloopvar` and `containedctx`
+- security and API checks such as `gosec`, `bodyclose`, and `exhaustive`
+- project style checks such as `decorder`, `prealloc`, `nolintlint`, `whitespace`, and `wsl_v5`
+- specific, explained `//nolint` directives for intentional exceptions
+
+## Pull request checks
+
+Go repositories should run these checks for pull requests that change Go code or module files:
+
+1. Run `go mod tidy` and `go mod verify`, then fail if `go.mod` or `go.sum` changed unexpectedly.
+2. Run `go test -race ./...` with a repository-appropriate timeout.
+3. Run the pinned GolangCI-Lint version against new code using the pull request's actual merge base.
+4. Exercise the production build or release path used by the repository.
+5. Run `govulncheck ./...`, with temporary advisory exceptions documented in CI and removed when fixes become available.
+
 ## References
 
 - [Go code review comments](https://go.dev/wiki/CodeReviewComments)
 - [Go doc comments](https://go.dev/doc/comment)
 - [Go concurrency patterns: pipelines and cancellation](https://go.dev/blog/pipelines)
+- [Xatu GolangCI-Lint configuration](https://github.com/ethpandaops/xatu/blob/master/.golangci.yml)
+- [Xatu Go test workflow](https://github.com/ethpandaops/xatu/blob/master/.github/workflows/test.yaml)
